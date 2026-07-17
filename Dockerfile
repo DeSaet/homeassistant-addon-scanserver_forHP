@@ -7,8 +7,10 @@ ENV TERM="xterm-256color"
 
 # Setup base
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # for debugging only
-        nano
+    nano \
+    usbutils \
+    hplip \
+    printer-driver-hpcups
 
 # Copy root filesystem
 COPY rootfs /
