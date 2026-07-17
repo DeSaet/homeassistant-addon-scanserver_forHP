@@ -1,6 +1,6 @@
 #!/usr/bin/with-contenv bashio
 
-ulimit -n 1048576
+# ulimit -n 1048576
 
 chmod a+x /usr/bin/get_scan_filename
 
@@ -107,6 +107,35 @@ fi
 chmod a+x "$SCRIPT_PATH/$(basename "$SCAN_SCRIPT")"
 
 ln -sfn /config/scripts /etc/scanbd/scripts
+
+echo "============================"
+echo "USB DEVICES"
+echo "============================"
+lsusb || true
+
+echo
+echo "============================"
+echo "SANE VERSION"
+echo "============================"
+scanimage -V || true
+
+echo
+echo "============================"
+echo "SCANIMAGE"
+echo "============================"
+scanimage -L || true
+
+echo
+echo "============================"
+echo "SANE FIND"
+echo "============================"
+sane-find-scanner || true
+
+echo
+echo "============================"
+echo "DLL"
+echo "============================"
+cat /etc/sane.d/dll.conf || true
 
 echo "Starting dbus-daemon..."
 dbus-daemon --system
