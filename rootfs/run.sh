@@ -212,17 +212,37 @@ find /usr -name saned 2>/dev/null || true
 
 mkdir -p /var/run/saned
 
+echo
+echo "============================"
+echo "SANED"
+echo "============================"
+
+which saned || true
+find /usr -name saned 2>/dev/null || true
+
 if [ -x /usr/sbin/saned ]; then
     echo "Starting saned from /usr/sbin/saned..."
-    /usr/sbin/saned -a -d128 &
+    SANED_DEBUG=255 /usr/sbin/saned -d255 -a &
 elif [ -x /usr/sbin/saned.bin ]; then
     echo "Starting saned from /usr/sbin/saned.bin..."
-    /usr/sbin/saned.bin -a -d128 &
+    SANED_DEBUG=255 /usr/sbin/saned.bin -d255 -a &
 else
     echo "ERROR: saned not found!"
 fi
 
-sleep 2
+sleep 3
+
+echo
+echo "============================"
+echo "SANED PROCESS"
+echo "============================"
+ps aux | grep saned || true
+
+echo
+echo "============================"
+echo "LISTENING PORTS"
+echo "============================"
+ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null || true
 
 echo
 echo "============================"
