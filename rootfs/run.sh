@@ -176,6 +176,29 @@ echo "SANE BACKENDS"
 echo "============================"
 find /usr -name "libsane-*.so*" 2>/dev/null
 
+echo
+echo "============================"
+echo "APT PACKAGES"
+echo "============================"
+
+dpkg -l | grep -E "hplip|usbutils|printer-driver"
+
+echo
+echo "============================"
+echo "HP COMMANDS"
+echo "============================"
+
+which hp-info || true
+hp-info --version || true
+
+echo
+echo "============================"
+echo "HPAIO"
+echo "============================"
+
+find /usr -name "libsane-hpaio*" 2>/dev/null
+find /usr -name "*hpaio*" 2>/dev/null
+
 echo "Starting dbus-daemon..."
 dbus-daemon --system
 
