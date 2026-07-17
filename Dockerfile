@@ -9,8 +9,8 @@ ENV TERM="xterm-256color"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nano \
     usbutils \
-    hplip \
-    printer-driver-hpcups
+    hplip && \
+    hp-info --version || true
 
 # Copy root filesystem
 COPY rootfs /
