@@ -226,7 +226,8 @@ which saned || true
 find /usr -name saned 2>/dev/null || true
 
 echo "Starting saned in foreground..."
-exec /usr/sbin/saned -l -d255 -e
+echo "Starting saned..."
+/usr/sbin/saned -l -d255 -e &
 
 #if [ -x /usr/sbin/saned ]; then
 #   echo "Starting saned from /usr/sbin/saned..."
@@ -332,8 +333,8 @@ reload_options
 trap reload_options SIGHUP
 
 echo "Starting scanbd..."
-export SANE_CONFIG_DIR=/etc/scanbd/
-scanbd -d2 -f -c /etc/scanbd/scanbd.conf 
+#export SANE_CONFIG_DIR=/etc/scanbd/
+#scanbd -d2 -f -c /etc/scanbd/scanbd.conf 
 
 echo "=== SANE devices ==="
 scanimage -L || true
