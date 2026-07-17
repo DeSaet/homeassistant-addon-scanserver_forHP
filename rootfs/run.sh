@@ -225,15 +225,18 @@ echo "============================"
 which saned || true
 find /usr -name saned 2>/dev/null || true
 
-if [ -x /usr/sbin/saned ]; then
-    echo "Starting saned from /usr/sbin/saned..."
-    SANED_DEBUG=255 /usr/sbin/saned -d255 -e -l &
-elif [ -x /usr/sbin/saned.bin ]; then
-    echo "Starting saned from /usr/sbin/saned.bin..."
-    SANED_DEBUG=255 /usr/sbin/saned.bin -d255 -a &
-else
-    echo "ERROR: saned not found!"
-fi
+echo "Starting saned in foreground..."
+exec /usr/sbin/saned -l -d255 -e
+
+#if [ -x /usr/sbin/saned ]; then
+#   echo "Starting saned from /usr/sbin/saned..."
+#    SANED_DEBUG=255 /usr/sbin/saned -d255 -e -l &
+#elif [ -x /usr/sbin/saned.bin ]; then
+#    echo "Starting saned from /usr/sbin/saned.bin..."
+#    SANED_DEBUG=255 /usr/sbin/saned.bin -d255 -a &
+#else
+#    echo "ERROR: saned not found!"
+#fi
 
 sleep 3
 
