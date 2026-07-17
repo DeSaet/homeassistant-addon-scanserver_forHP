@@ -248,3 +248,9 @@ trap reload_options SIGHUP
 echo "Starting scanbd..."
 export SANE_CONFIG_DIR=/etc/scanbd/
 scanbd -d2 -f -c /etc/scanbd/scanbd.conf 
+
+echo "=== SANE devices ==="
+scanimage -L || true
+
+echo "=== Available backends ==="
+scanimage -A || true
