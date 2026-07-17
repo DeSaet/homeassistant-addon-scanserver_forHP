@@ -13,9 +13,12 @@ RUN set -ex \
     usbutils \
     hplip \
     printer-driver-hpcups \
+    sane-utils \
+    libsane1 \
  && which hp-info \
  && hp-info --version \
- && find /usr -name "*hpaio*"
+ && find /usr -name "*hpaio*" \
+ && find /usr -name saned || true
 
 # Copy root filesystem
 COPY rootfs /
