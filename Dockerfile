@@ -6,11 +6,16 @@ LABEL io.hass.version="1.0" io.hass.type="addon" io.hass.arch="aarch64|amd64"
 ENV TERM="xterm-256color"
 
 # Setup base
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN set -ex \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
     nano \
     usbutils \
-    hplip && \
-    hp-info --version || true
+    hplip \
+    printer-driver-hpcups \
+ && which hp-info \
+ && hp-info --version \
+ && find /usr -name "*hpaio*"
 
 # Copy root filesystem
 COPY rootfs /
