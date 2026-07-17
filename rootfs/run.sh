@@ -30,6 +30,14 @@ if [ ! -d "/homeassistant/custom_components/scan_server_integration" ]; then
 fi
 # @TODO check component version and update if necessary
 
+echo "=== TEST DIRECT SCAN ==="
+
+scanimage \
+-d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
+-T
+
+echo "======================="
+
 CONFIG_PATH_DLL="/config/dll.conf"
 SCANBD_CONF_DLL="/etc/scanbd/dll.conf"
 
