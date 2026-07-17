@@ -247,13 +247,23 @@ echo
 echo "============================"
 echo "LISTENING PORTS"
 echo "============================"
-ss -tulpn 2>/dev/null || netstat -tulpn 2>/dev/null || true
+
+echo "ss:"
+which ss || echo "ss not found"
+
+echo "netstat:"
+which netstat || echo "netstat not found"
 
 echo
-echo "============================"
-echo "LISTENING PORTS"
-echo "============================"
-netstat -lnt 2>/dev/null || true
+echo "Ports:"
+
+if command -v ss >/dev/null 2>&1; then
+    ss -tulpn
+elif command -v netstat >/dev/null 2>&1; then
+    netstat -tulpn
+else
+    echo "Neither ss nor netstat is installed."
+fi
 
 OPTIONS_FILE="/data/options.json"
 
