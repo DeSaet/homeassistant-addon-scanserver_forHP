@@ -137,6 +137,27 @@ echo "DLL"
 echo "============================"
 cat /etc/sane.d/dll.conf || true
 
+echo
+echo "============================"
+echo "INSTALLED HPLIP"
+echo "============================"
+
+dpkg -l | grep hplip || true
+
+echo
+echo "============================"
+echo "HPAIO LIBRARY"
+echo "============================"
+
+find /usr -name "*hpaio*" 2>/dev/null || true
+
+echo
+echo "============================"
+echo "SANE BACKENDS"
+echo "============================"
+
+find /usr -name "libsane-*.so*" 2>/dev/null || true
+
 echo "Starting dbus-daemon..."
 dbus-daemon --system
 
