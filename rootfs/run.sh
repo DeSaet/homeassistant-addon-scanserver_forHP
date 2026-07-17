@@ -4,6 +4,9 @@
 
 chmod a+x /usr/bin/get_scan_filename
 
+echo "Starting dbus-daemon..."
+dbus-daemon --system
+
 echo "copying defaults and scan_pre from /opt/sane-scan-pdf to /config/sane-scan-pdf if non-existing"
 mkdir -p "/config/sane-scan-pdf"
 if [ ! -f "/config/sane-scan-pdf/defaults" ]; then
