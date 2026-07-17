@@ -158,6 +158,24 @@ echo "============================"
 
 find /usr -name "libsane-*.so*" 2>/dev/null || true
 
+echo
+echo "============================"
+echo "INSTALLED PACKAGES"
+echo "============================"
+dpkg -l | grep -E "hplip|sane|scanbd"
+
+echo
+echo "============================"
+echo "HPAIO"
+echo "============================"
+find /usr -name "*hpaio*" 2>/dev/null
+
+echo
+echo "============================"
+echo "SANE BACKENDS"
+echo "============================"
+find /usr -name "libsane-*.so*" 2>/dev/null
+
 echo "Starting dbus-daemon..."
 dbus-daemon --system
 
