@@ -208,6 +208,11 @@ echo "SANED"
 echo "============================"
 
 which saned || true
+echo
+echo "============================"
+echo "SANED HELP"
+echo "============================"
+saned --help || saned -h || true
 find /usr -name saned 2>/dev/null || true
 
 mkdir -p /var/run/saned
