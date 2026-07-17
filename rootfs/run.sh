@@ -202,8 +202,33 @@ find /usr -name "*hpaio*" 2>/dev/null
 echo "Starting dbus-daemon..."
 dbus-daemon --system
 
-echo "Starting inetd..."
-service openbsd-inetd start
+echo
+echo "============================"
+echo "SANED"
+echo "============================"
+
+which saned || true
+find /usr -name saned 2>/dev/null || true
+
+mkdir -p /var/run/saned
+
+if [ -x /usr/sbin/saned ]; then
+    echo "Starting saned from /usr/sbin/saned..."
+    /usr/sbin/saned -a -d128 &
+elif [ -x /usr/sbin/saned.bin ]; then
+    echo "Starting saned from /usr/sbin/saned.bin..."
+    /usr/sbin/saned.bin -a -d128 &
+else
+    echo "ERROR: saned not found!"
+fi
+
+sleep 2
+
+echo
+echo "============================"
+echo "LISTENING PORTS"
+echo "============================"
+netstat -lnt 2>/dev/null || true
 
 OPTIONS_FILE="/data/options.json"
 
