@@ -1,5 +1,5 @@
 {
   "name": "Home Assistant Sane Scanner Add-On repository",
-  "url": "https://github.com/Connum/homeassistant-addon-scanserver",
-  "maintainer": "Sarah Groß"
+  "url": "https://github.com/DeSaet/homeassistant-addon-scanserver_forHP",
+  "maintainer": "DeSaet"
 }
