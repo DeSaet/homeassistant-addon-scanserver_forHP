@@ -230,10 +230,10 @@ exec /usr/sbin/saned -l -d255 -e
 
 #if [ -x /usr/sbin/saned ]; then
 #   echo "Starting saned from /usr/sbin/saned..."
-#    SANED_DEBUG=255 /usr/sbin/saned -d255 -e -l &
+#    SANED_DEBUG=255 /usr/sbin/saned -l -d255 -e
 #elif [ -x /usr/sbin/saned.bin ]; then
 #    echo "Starting saned from /usr/sbin/saned.bin..."
-#    SANED_DEBUG=255 /usr/sbin/saned.bin -d255 -a &
+#    SANED_DEBUG=255 /usr/sbin/saned.bin -l -d255 -e
 #else
 #    echo "ERROR: saned not found!"
 #fi
