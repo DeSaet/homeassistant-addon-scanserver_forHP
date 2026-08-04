@@ -33,6 +33,29 @@ if [ ! -d "/homeassistant/custom_components/scan_server_integration" ]; then
 fi
 # @TODO check component version and update if necessary
 
+echo "======================="
+echo "USB DEVICES"
+echo "======================="
+lsusb
+
+echo
+echo "======================="
+echo "USB BUS"
+echo "======================="
+find /dev/bus/usb
+
+echo
+echo "======================="
+echo "USB PERMISSIONS"
+echo "======================="
+ls -lR /dev/bus/usb
+
+echo
+echo "======================="
+echo "SANE FIND"
+echo "======================="
+sane-find-scanner -v
+
 echo "=== TEST DIRECT SCAN ==="
 
 scanimage \
