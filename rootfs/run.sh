@@ -79,9 +79,20 @@ echo
 echo "===== SCAN LIST ====="
 scanimage -L || true
 
-scanimage \
--d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
--T
+echo "=== USB ==="
+lsusb || true
+
+echo
+echo "=== SANE FIND ==="
+sane-find-scanner || true
+
+echo
+echo "=== SCANIMAGE -L ==="
+scanimage -L || true
+
+echo
+echo "=== TEST DIRECT SCAN ==="
+scanimage -T || true
 
 echo "======================="
 
