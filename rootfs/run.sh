@@ -2,6 +2,11 @@
 
 # ulimit -n 1048576
 
+echo "########################################"
+echo "### CUSTOM BUILD $(date)"
+echo "########################################"
+sleep 5
+
 chmod a+x /usr/bin/get_scan_filename
 
 echo "Starting dbus-daemon..."
