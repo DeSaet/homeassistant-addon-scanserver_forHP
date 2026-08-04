@@ -1,408 +1,187 @@
 #!/usr/bin/with-contenv bashio
 
-# ulimit -n 1048576
+set -e
 
 echo "########################################"
-echo "### CUSTOM BUILD $(date)"
+echo "### Scan Server starting"
 echo "########################################"
-sleep 5
 
-chmod a+x /usr/bin/get_scan_filename
+chmod +x /usr/bin/get_scan_filename
+
+####################################################
+# DBUS
+####################################################
 
 echo "Starting dbus-daemon..."
-dbus-daemon --system
 
-echo "copying defaults and scan_pre from /opt/sane-scan-pdf to /config/sane-scan-pdf if non-existing"
-mkdir -p "/config/sane-scan-pdf"
-if [ ! -f "/config/sane-scan-pdf/defaults" ]; then
-    mv /opt/sane-scan-pdf/defaults /config/sane-scan-pdf/defaults
-else
-    rm /opt/sane-scan-pdf/defaults
-fi
-ln -s /config/sane-scan-pdf/defaults /opt/sane-scan-pdf/defaults
+mkdir -p /run/dbus
 
-if [ ! -f "/config/sane-scan-pdf/scan_pre" ]; then
-    mv /opt/sane-scan-pdf/scan_pre /config/sane-scan-pdf/scan_pre
-else
-    rm /opt/sane-scan-pdf/scan_pre
-fi
-ln -s /config/sane-scan-pdf/scan_pre /opt/sane-scan-pdf/scan_pre
-
-chmod a+x /config/sane-scan-pdf/defaults /config/sane-scan-pdf/scan_pre
-
-# copy custom component if it doesn't already exist
-if [ ! -d "/homeassistant/custom_components/scan_server_integration" ]; then
-  echo "Custom integration not found, copying..."
-    mkdir -p /homeassistant/custom_components/scan_server_integration
-    cp -r /custom_components/scan_server_integration/* /homeassistant/custom_components/scan_server_integration/
-fi
-# @TODO check component version and update if necessary
-
-echo "======================="
-echo "USB DEVICES"
-echo "======================="
-lsusb
-
-echo
-echo "======================="
-echo "USB BUS"
-echo "======================="
-find /dev/bus/usb
-
-echo
-echo "======================="
-echo "USB PERMISSIONS"
-echo "======================="
-ls -lR /dev/bus/usb
-
-echo
-echo "======================="
-echo "SANE FIND"
-echo "======================="
-sane-find-scanner -v
-
-echo "=== TEST DIRECT SCAN ==="
-
-echo "===== USB ====="
-ls -l /dev/bus/usb || true
-ls -l /dev/usb || true
-
-echo
-echo "===== HP ====="
-hp-info -i || true
-
-echo
-echo "===== SCAN FIND ====="
-sane-find-scanner || true
-
-echo
-echo "===== SCAN LIST ====="
-scanimage -L || true
-
-echo "=== USB ==="
-lsusb || true
-
-echo
-echo "=== SANE FIND ==="
-sane-find-scanner || true
-
-echo
-echo "=== SCANIMAGE -L ==="
-scanimage -L || true
-
-echo
-echo "=== TEST DIRECT SCAN ==="
-scanimage -T || true
-
-echo "======================="
-
-CONFIG_PATH_DLL="/config/dll.conf"
-SCANBD_CONF_DLL="/etc/scanbd/dll.conf"
-
-echo "Checking for $CONFIG_PATH_DLL"
-# Check if /config/dll.conf exists
-if [ ! -f "$CONFIG_PATH_DLL" ]; then
-    mv "$SCANBD_CONF_DLL" "$CONFIG_PATH_DLL"
-    echo "created default config"
-else
-  echo "use existing config"
+if [ ! -f /run/dbus/pid ]; then
+    dbus-daemon --system
 fi
 
-# Ensure /etc/scanbd/dll.conf is a symlink to /config/dll.conf
-rm -f "$SCANBD_CONF_DLL"
-ln -s "$CONFIG_PATH_DLL" "$SCANBD_CONF_DLL"
+####################################################
+# sane-scan-pdf
+####################################################
 
+mkdir -p /config/sane-scan-pdf
 
-
-CONFIG_PATH_SANED="/config/saned.conf"
-SANED_CONF="/etc/sane.d/saned.conf"
-
-echo "Checking for $CONFIG_PATH_SANED"
-# Check if /config/saned.conf exists
-if [ ! -f "$CONFIG_PATH_SANED" ]; then
-    # update /config/saned.conf
-    echo -e "\n# Allow all private network ranges\nlocalhost\n192.168.0.0/16\n10.0.0.0/8\n172.16.0.0/12" | tee -a $SANED_CONF
-    # Otherwise, move the existing config
-    mv "$SANED_CONF" "$CONFIG_PATH_SANED"
-
-    echo "created default config"
-else
-  echo "use existing config"
+if [ ! -f /config/sane-scan-pdf/defaults ]; then
+    cp /opt/sane-scan-pdf/defaults /config/sane-scan-pdf/defaults
 fi
 
-# Ensure /etc/sane.d/saned.conf is a symlink to /config/saned.conf
-rm -f "$SANED_CONF"
-ln -s "$CONFIG_PATH_SANED" "$SANED_CONF"
-
-
-CONFIG_PATH_SCANBD="/config/scanbd.conf"
-SCANBD_CONF="/etc/scanbd/scanbd.conf"
-
-echo "Checking for $CONFIG_PATH_SCANBD"
-# Check if /config/scanbd.conf exists
-if [ ! -f "$CONFIG_PATH_SCANBD" ]; then
-    # Otherwise, move the existing config
-    mv "$SCANBD_CONF" "$CONFIG_PATH_SCANBD"
-    sed -i 's/"test\.script"/"scan.script"/g' "$CONFIG_PATH_SCANBD"
-
-    echo "created default config"
-else
-  echo "use existing config"
+if [ ! -f /config/sane-scan-pdf/scan_pre ]; then
+    cp /opt/sane-scan-pdf/scan_pre /config/sane-scan-pdf/scan_pre
 fi
 
-# Ensure /etc/scanbd/scanbd.conf is a symlink to /config/scanbd.conf
-rm -f "$SCANBD_CONF"
-ln -s "$CONFIG_PATH_SCANBD" "$SCANBD_CONF"
+ln -sf /config/sane-scan-pdf/defaults /opt/sane-scan-pdf/defaults
+ln -sf /config/sane-scan-pdf/scan_pre /opt/sane-scan-pdf/scan_pre
 
-SCRIPT_PATH="/config/scripts"
-if [ ! -d "$SCRIPT_PATH" ]; then
-    echo "creating default scanbd scripts in $SCRIPT_PATH"
-    
-    # Move the folder and its contents
-    mv /usr/share/scanbd/scripts /config/
-else
-    echo "Using existing scanbd scripts from $SCRIPT_PATH"
+chmod +x /config/sane-scan-pdf/defaults
+chmod +x /config/sane-scan-pdf/scan_pre
+
+####################################################
+# Home Assistant Integration
+####################################################
+
+mkdir -p /homeassistant/custom_components/scan_server_integration
+
+cp -r /custom_components/scan_server_integration/* \
+      /homeassistant/custom_components/scan_server_integration/ \
+      2>/dev/null || true
+
+####################################################
+# Configuration
+####################################################
+
+mkdir -p /config/scripts
+
+[ -f /config/dll.conf ] || cp /etc/sane.d/dll.conf /config/dll.conf
+[ -f /config/saned.conf ] || cp /etc/sane.d/saned.conf /config/saned.conf
+[ -f /config/scanbd.conf ] || cp /etc/scanbd/scanbd.conf /config/scanbd.conf
+
+ln -sf /config/dll.conf /etc/sane.d/dll.conf
+ln -sf /config/saned.conf /etc/sane.d/saned.conf
+ln -sf /config/scanbd.conf /etc/scanbd/scanbd.conf
+
+####################################################
+# scan.script
+####################################################
+
+if [ ! -f /config/scripts/scan.script ]; then
+    cp /src/scripts/scan.script /config/scripts/scan.script
 fi
 
-SCAN_SCRIPT="$SCRIPT_PATH/scan.script"
-SCAN_SCRIPT_SOURCE="src/scripts/scan.script"
-if [ ! -f "$SCAN_SCRIPT" ]; then
-    mv "$SCAN_SCRIPT_SOURCE" "$SCRIPT_PATH"
-fi
-
-chmod a+x "$SCRIPT_PATH/$(basename "$SCAN_SCRIPT")"
+chmod +x /config/scripts/scan.script
 
 ln -sfn /config/scripts /etc/scanbd/scripts
 
+####################################################
+# Diagnostics
+####################################################
+
+echo
 echo "============================"
-echo "USB DEVICES"
+echo "USB devices"
 echo "============================"
+
 lsusb || true
 
 echo
 echo "============================"
-echo "SANE VERSION"
+echo "Scanner list"
 echo "============================"
-scanimage -V || true
 
-echo
-echo "============================"
-echo "SCANIMAGE"
-echo "============================"
 scanimage -L || true
 
 echo
 echo "============================"
-echo "SANE FIND"
+echo "SANE backends"
 echo "============================"
+
+scanimage -A || true
+
+echo
+echo "============================"
+echo "Find scanner"
+echo "============================"
+
 sane-find-scanner || true
 
-echo
-echo "============================"
-echo "DLL"
-echo "============================"
-cat /etc/sane.d/dll.conf || true
+####################################################
+# Start saned
+####################################################
 
 echo
 echo "============================"
-echo "INSTALLED HPLIP"
+echo "Starting saned"
 echo "============================"
-
-dpkg -l | grep hplip || true
-
-echo
-echo "============================"
-echo "HPAIO LIBRARY"
-echo "============================"
-
-find /usr -name "*hpaio*" 2>/dev/null || true
-
-echo
-echo "============================"
-echo "SANE BACKENDS"
-echo "============================"
-
-find /usr -name "libsane-*.so*" 2>/dev/null || true
-
-echo
-echo "============================"
-echo "INSTALLED PACKAGES"
-echo "============================"
-dpkg -l | grep -E "hplip|sane|scanbd"
-
-echo
-echo "============================"
-echo "HPAIO"
-echo "============================"
-find /usr -name "*hpaio*" 2>/dev/null
-
-echo
-echo "============================"
-echo "SANE BACKENDS"
-echo "============================"
-find /usr -name "libsane-*.so*" 2>/dev/null
-
-echo
-echo "============================"
-echo "APT PACKAGES"
-echo "============================"
-
-dpkg -l | grep -E "hplip|usbutils|printer-driver"
-
-echo
-echo "============================"
-echo "HP COMMANDS"
-echo "============================"
-
-which hp-info || true
-hp-info --version || true
-
-echo
-echo "============================"
-echo "HPAIO"
-echo "============================"
-
-find /usr -name "libsane-hpaio*" 2>/dev/null
-find /usr -name "*hpaio*" 2>/dev/null
-
-echo "Starting dbus-daemon..."
-
-echo
-echo "============================"
-echo "SANED"
-echo "============================"
-
-which saned || true
-echo
-echo "============================"
-echo "SANED HELP"
-echo "============================"
-saned --help || saned -h || true
-find /usr -name saned 2>/dev/null || true
 
 mkdir -p /var/run/saned
 
-echo
-echo "============================"
-echo "SANED"
-echo "============================"
+/usr/sbin/saned -l -e &
+sleep 2
 
-which saned || true
-find /usr -name saned 2>/dev/null || true
-
-echo "Starting saned in foreground..."
-echo "Starting saned..."
-/usr/sbin/saned -l -d255 -e &
-
-#if [ -x /usr/sbin/saned ]; then
-#   echo "Starting saned from /usr/sbin/saned..."
-#    SANED_DEBUG=255 /usr/sbin/saned -l -d255 -e
-#elif [ -x /usr/sbin/saned.bin ]; then
-#    echo "Starting saned from /usr/sbin/saned.bin..."
-#    SANED_DEBUG=255 /usr/sbin/saned.bin -l -d255 -e
-#else
-#    echo "ERROR: saned not found!"
-#fi
-
-sleep 3
-
-echo
-echo "============================"
-echo "SANED PROCESS"
-echo "============================"
-ps aux | grep saned || true
-
-echo
-echo "============================"
-echo "LISTENING PORTS"
-echo "============================"
-
-echo "ss:"
-which ss || echo "ss not found"
-
-echo "netstat:"
-which netstat || echo "netstat not found"
-
-echo
-echo "Ports:"
-
-if command -v ss >/dev/null 2>&1; then
-    ss -tulpn
-elif command -v netstat >/dev/null 2>&1; then
-    netstat -tulpn
-else
-    echo "Neither ss nor netstat is installed."
-fi
+####################################################
+# Network share
+####################################################
 
 OPTIONS_FILE="/data/options.json"
 
-# Function to process options
 reload_options() {
-    NETSHARE_SERVER=$(jq -r '.netshare_server' $OPTIONS_FILE)
-    NETSHARE_USERNAME=$(jq -r '.netshare_username' $OPTIONS_FILE)
-    NETSHARE_PASSWORD=$(jq -r '.netshare_password' $OPTIONS_FILE)
-    NETSHARE_PATH=$(jq -r '.netshare_path' $OPTIONS_FILE)
-    NETSHARE_PATH="${NETSHARE_PATH##[\\/]}" # remove leading slashes
 
-    # delete previous mount, ignoring if it doesn't exist
-    curl -sSL -H "Authorization: Bearer $SUPERVISOR_TOKEN" http://supervisor/mounts/scanserver -X DELETE > /dev/null
+    NETSHARE_SERVER=$(jq -r '.netshare_server' "$OPTIONS_FILE")
+    NETSHARE_USERNAME=$(jq -r '.netshare_username' "$OPTIONS_FILE")
+    NETSHARE_PASSWORD=$(jq -r '.netshare_password' "$OPTIONS_FILE")
+    NETSHARE_PATH=$(jq -r '.netshare_path' "$OPTIONS_FILE")
 
-    if [[ -n "$NETSHARE_SERVER" ]]; then
-        JSON_DATA=$(jq -n \
-            --arg name "scanserver" \
-            --arg usage "share" \
-            --arg type "cifs" \
+    NETSHARE_PATH="${NETSHARE_PATH##[\\/]}"
+
+    curl -s \
+        -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+        -X DELETE \
+        http://supervisor/mounts/scanserver \
+        >/dev/null || true
+
+    if [ -n "$NETSHARE_SERVER" ]; then
+
+        JSON=$(jq -n \
             --arg server "$NETSHARE_SERVER" \
             --arg share "$NETSHARE_PATH" \
             --arg username "$NETSHARE_USERNAME" \
             --arg password "$NETSHARE_PASSWORD" \
-            --argjson read_only false \
             '{
-                name: $name,
-                usage: $usage,
-                type: $type,
-                server: $server,
-                share: $share,
-                username: $username,
-                password: $password,
-                read_only: $read_only
+                name:"scanserver",
+                usage:"share",
+                type:"cifs",
+                server:$server,
+                share:$share,
+                username:$username,
+                password:$password,
+                read_only:false
             }')
 
-        # Send the JSON data in the POST request
-        RESPONSE=$(curl -sSL -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+        curl \
+            -s \
+            -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
             -H "Content-Type: application/json" \
-            -X POST -d "$JSON_DATA" http://supervisor/mounts)
-        RESPONSE_RESULT=$(jq -r ".result" <<< "$RESPONSE")
-        
-        if [[ $RESPONSE_RESULT != 'ok' ]] then
-            curl -X POST \
-                -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-                -H "Content-Type: application/json" \
-                -d '{
-                    "message": "The network share could not be mounted, please check the host, user, password and path in the add-on options.",
-                    "title": "Scan Server Error: Could not mount network share",
-                    "notification_id": "scan_server_error"
-                }' \
-                http://supervisor/core/api/services/persistent_notification/create
-        else
-            echo "Network share $NETSHARE_SERVER/$NETSHARE_PATH mounted to /share/scanserver"
-        fi
-        
+            -X POST \
+            -d "$JSON" \
+            http://supervisor/mounts >/dev/null || true
     fi
 }
 
-# Initial load of options
 reload_options
 
-# Listen for SIGHUP to trigger reloads
 trap reload_options SIGHUP
 
-echo "Starting scanbd..."
-# export SANE_CONFIG_DIR=/etc/scanbd/
-# scanbd -d2 -f -c /etc/scanbd/scanbd.conf 
+####################################################
+# Start scanbd
+####################################################
 
-echo "=== SANE devices ==="
-scanimage -L || true
+echo
+echo "============================"
+echo "Starting scanbd"
+echo "============================"
 
-echo "=== Available backends ==="
-scanimage -A || true
+exec scanbd -f -d7 -c /etc/scanbd/scanbd.conf
