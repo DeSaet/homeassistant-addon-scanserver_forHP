@@ -63,6 +63,22 @@ sane-find-scanner -v
 
 echo "=== TEST DIRECT SCAN ==="
 
+echo "===== USB ====="
+ls -l /dev/bus/usb || true
+ls -l /dev/usb || true
+
+echo
+echo "===== HP ====="
+hp-info -i || true
+
+echo
+echo "===== SCAN FIND ====="
+sane-find-scanner || true
+
+echo
+echo "===== SCAN LIST ====="
+scanimage -L || true
+
 scanimage \
 -d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
 -T
@@ -239,7 +255,6 @@ find /usr -name "libsane-hpaio*" 2>/dev/null
 find /usr -name "*hpaio*" 2>/dev/null
 
 echo "Starting dbus-daemon..."
-dbus-daemon --system
 
 echo
 echo "============================"
