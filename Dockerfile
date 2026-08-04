@@ -23,6 +23,9 @@ RUN set -ex \
 # Copy root filesystem
 COPY rootfs /
 
+RUN echo "===== VERIFY RUN.SH =====" \
+ && head -30 /run.sh
+
 RUN chmod a+x /run.sh /setup.sh \
     && . /setup.sh \
     && rm /setup.sh
