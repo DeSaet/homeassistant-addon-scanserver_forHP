@@ -1,33 +1,31 @@
 FROM ghcr.io/connum/debian-base-scansupport:7.7.1
 
-LABEL io.hass.version="1.0" io.hass.type="addon" io.hass.arch="aarch64|amd64"
+LABEL \
+    io.hass.type="addon" \
+    io.hass.arch="aarch64|amd64"
 
-# Add env
-ENV TERM="xterm-256color"
+ENV \
+    TERM=xterm-256color \
+    SANE_CONFIG_DIR=/etc/sane.d
 
-# Setup base
-RUN set -ex \
- && apt-get update \
- && apt-get install -y --no-install-recommends \
-    nano \
-    usbutils \
-    hplip \
-    printer-driver-hpcups \
-    sane-utils \
-    libsane1 \
- && which hp-info \
- && hp-info --version \
- && find /usr -name "*hpaio*" \
- && find /usr -name saned || true
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        hplip \
+        hplip-data \
+        printer-driver-hpcups \
+        sane-utils \
+        libsane1 \
+        usbutils \
+        jq \
+        curl \
+        dbus \
+        nano && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy root filesystem
 COPY rootfs /
 
-RUN echo "===== VERIFY RUN.SH =====" \
- && head -30 /run.sh
+RUN chmod +x \
+        /run.sh \
+        /usr/bin/get_scan_filename
 
-RUN chmod a+x /run.sh /setup.sh \
-    && . /setup.sh \
-    && rm /setup.sh
-
-CMD ["sh", "-c", "echo HELLO FROM NEW IMAGE; ls -l /run.sh; head -20 /run.sh; sleep 30"]
+CMD ["/run.sh"]
