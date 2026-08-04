@@ -27,4 +27,4 @@ RUN chmod a+x /run.sh /setup.sh \
     && . /setup.sh \
     && rm /setup.sh
 
-CMD ["/run.sh"]
+CMD ["sh", "-c", "echo HELLO FROM NEW IMAGE; ls -l /run.sh; head -20 /run.sh; sleep 30"]
