@@ -24,6 +24,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY rootfs /
+COPY run.sh /
+COPY setup.sh /
 
 RUN chmod +x \
         /run.sh \
