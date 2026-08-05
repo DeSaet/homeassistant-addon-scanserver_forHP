@@ -1,4 +1,5 @@
-FROM ghcr.io/connum/debian-base-scansupport:7.7.1
+ARG BUILD_FROM
+FROM ${BUILD_FROM}
 
 LABEL \
     io.hass.type="addon" \
