@@ -109,6 +109,33 @@ echo "USB devices"
 echo "============================"
 lsusb || true
 
+echo "============================"
+echo "USB permissions"
+echo "============================"
+
+ls -l /dev/bus/usb/001/003 || true
+
+echo "============================"
+echo "Processes"
+echo "============================"
+
+ps aux
+
+echo "============================"
+echo "HP processes"
+echo "============================"
+
+pgrep -a hp || true
+pgrep -a cups || true
+pgrep -a ipp || true
+pgrep -a scan || true
+
+echo "============================"
+echo "USB device"
+echo "============================"
+
+find /dev/bus/usb -type c -exec ls -l {} \;
+
 echo
 echo "============================"
 echo "Scanner list"
