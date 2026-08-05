@@ -17,6 +17,10 @@ RUN apt-get install -y \
     nano && \
     rm -rf /var/lib/apt/lists/*
 
+RUN apt-cache policy libsane-hpaio || true
+RUN apt-cache search hpaio || true
+RUN dpkg -L hplip | grep hpaio || true
+
 RUN echo "========== INSTALLED HPAIO ==========" && \
     find /usr -name "*hpaio*" || true && \
     echo "========== SANE LIBS ==========" && \
