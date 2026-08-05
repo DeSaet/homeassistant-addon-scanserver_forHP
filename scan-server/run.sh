@@ -229,6 +229,20 @@ scanimage -L || true
 echo
 echo "Try open scanner..."
 
+hp-info -i || true
+
+echo "============================"
+echo "USB permissions"
+echo "============================"
+
+ls -l /dev/bus/usb/*/*
+
+echo "============================"
+echo "Scan test"
+echo "============================"
+
+scanimage -T -d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" || true
+
 scanimage \
 -d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
 --format=pnm >/dev/null || true
