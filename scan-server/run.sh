@@ -6,67 +6,80 @@ echo "########################################"
 echo "### Scan Server starting"
 echo "########################################"
 
-chmod +x /usr/bin/get_scan_filename
+chmod +x /usr/bin/get_scan_filename || true
 
-####################################################
+############################################################
 # DBUS
-####################################################
+############################################################
 
 echo "Starting dbus-daemon..."
-
 mkdir -p /run/dbus
+dbus-daemon --system
 
-if [ ! -f /run/dbus/pid ]; then
-    dbus-daemon --system
-fi
-
-####################################################
+############################################################
 # sane-scan-pdf
-####################################################
+############################################################
 
 mkdir -p /config/sane-scan-pdf
 
-if [ ! -f /config/sane-scan-pdf/defaults ]; then
+[ -f /config/sane-scan-pdf/defaults ] || \
     cp /opt/sane-scan-pdf/defaults /config/sane-scan-pdf/defaults
-fi
 
-if [ ! -f /config/sane-scan-pdf/scan_pre ]; then
+[ -f /config/sane-scan-pdf/scan_pre ] || \
     cp /opt/sane-scan-pdf/scan_pre /config/sane-scan-pdf/scan_pre
-fi
 
-ln -sf /config/sane-scan-pdf/defaults /opt/sane-scan-pdf/defaults
-ln -sf /config/sane-scan-pdf/scan_pre /opt/sane-scan-pdf/scan_pre
+rm -f /opt/sane-scan-pdf/defaults
+rm -f /opt/sane-scan-pdf/scan_pre
+
+ln -s /config/sane-scan-pdf/defaults /opt/sane-scan-pdf/defaults
+ln -s /config/sane-scan-pdf/scan_pre /opt/sane-scan-pdf/scan_pre
 
 chmod +x /config/sane-scan-pdf/defaults
 chmod +x /config/sane-scan-pdf/scan_pre
 
-####################################################
-# Home Assistant Integration
-####################################################
+############################################################
+# Config files
+############################################################
 
-mkdir -p /homeassistant/custom_components/scan_server_integration
+mkdir -p /config
 
-cp -r /custom_components/scan_server_integration/* \
-      /homeassistant/custom_components/scan_server_integration/ \
-      2>/dev/null || true
+if [ ! -f /config/dll.conf ]; then
+    cp /etc/sane.d/dll.conf /config/dll.conf
+fi
 
-####################################################
-# Configuration
-####################################################
+rm -f /etc/sane.d/dll.conf
+ln -s /config/dll.conf /etc/sane.d/dll.conf
+
+if [ ! -f /config/saned.conf ]; then
+cat >/config/saned.conf <<EOF
+localhost
+127.0.0.1
+::1
+192.168.0.0/16
+10.0.0.0/8
+172.16.0.0/12
+EOF
+fi
+
+rm -f /etc/sane.d/saned.conf
+ln -s /config/saned.conf /etc/sane.d/saned.conf
+
+############################################################
+# scanbd config
+############################################################
+
+if [ ! -f /config/scanbd.conf ]; then
+    cp /etc/scanbd/scanbd.conf /config/scanbd.conf
+fi
+
+rm -f /etc/scanbd/scanbd.conf
+ln -s /config/scanbd.conf /etc/scanbd/scanbd.conf
+
+############################################################
+# scripts
+############################################################
 
 mkdir -p /config/scripts
-
-[ -f /config/dll.conf ] || cp /etc/sane.d/dll.conf /config/dll.conf
-[ -f /config/saned.conf ] || cp /etc/sane.d/saned.conf /config/saned.conf
-[ -f /config/scanbd.conf ] || cp /etc/scanbd/scanbd.conf /config/scanbd.conf
-
-ln -sf /config/dll.conf /etc/sane.d/dll.conf
-ln -sf /config/saned.conf /etc/sane.d/saned.conf
-ln -sf /config/scanbd.conf /etc/scanbd/scanbd.conf
-
-####################################################
-# scan.script
-####################################################
 
 if [ ! -f /config/scripts/scan.script ]; then
     cp /src/scripts/scan.script /config/scripts/scan.script
@@ -74,43 +87,43 @@ fi
 
 chmod +x /config/scripts/scan.script
 
-ln -sfn /config/scripts /etc/scanbd/scripts
+rm -rf /etc/scanbd/scripts
+ln -s /config/scripts /etc/scanbd/scripts
 
-####################################################
+############################################################
+# Home Assistant integration
+############################################################
+
+if [ ! -d /homeassistant/custom_components/scan_server_integration ]; then
+    mkdir -p /homeassistant/custom_components/scan_server_integration
+    cp -r /custom_components/scan_server_integration/* \
+        /homeassistant/custom_components/scan_server_integration/
+fi
+
+############################################################
 # Diagnostics
-####################################################
+############################################################
 
-echo
 echo "============================"
 echo "USB devices"
 echo "============================"
-
 lsusb || true
 
 echo
 echo "============================"
 echo "Scanner list"
 echo "============================"
-
 scanimage -L || true
-
-echo
-echo "============================"
-echo "SANE backends"
-echo "============================"
-
-scanimage -A || true
 
 echo
 echo "============================"
 echo "Find scanner"
 echo "============================"
-
 sane-find-scanner || true
 
-####################################################
-# Start saned
-####################################################
+############################################################
+# saned
+############################################################
 
 echo
 echo "============================"
@@ -119,69 +132,17 @@ echo "============================"
 
 mkdir -p /var/run/saned
 
-/usr/sbin/saned -l -e &
+/usr/sbin/saned -a -d128 &
+
 sleep 2
 
-####################################################
-# Network share
-####################################################
-
-OPTIONS_FILE="/data/options.json"
-
-reload_options() {
-
-    NETSHARE_SERVER=$(jq -r '.netshare_server' "$OPTIONS_FILE")
-    NETSHARE_USERNAME=$(jq -r '.netshare_username' "$OPTIONS_FILE")
-    NETSHARE_PASSWORD=$(jq -r '.netshare_password' "$OPTIONS_FILE")
-    NETSHARE_PATH=$(jq -r '.netshare_path' "$OPTIONS_FILE")
-
-    NETSHARE_PATH="${NETSHARE_PATH##[\\/]}"
-
-    curl -s \
-        -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-        -X DELETE \
-        http://supervisor/mounts/scanserver \
-        >/dev/null || true
-
-    if [ -n "$NETSHARE_SERVER" ]; then
-
-        JSON=$(jq -n \
-            --arg server "$NETSHARE_SERVER" \
-            --arg share "$NETSHARE_PATH" \
-            --arg username "$NETSHARE_USERNAME" \
-            --arg password "$NETSHARE_PASSWORD" \
-            '{
-                name:"scanserver",
-                usage:"share",
-                type:"cifs",
-                server:$server,
-                share:$share,
-                username:$username,
-                password:$password,
-                read_only:false
-            }')
-
-        curl \
-            -s \
-            -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d "$JSON" \
-            http://supervisor/mounts >/dev/null || true
-    fi
-}
-
-reload_options
-
-trap reload_options SIGHUP
-
-####################################################
-# Start scanbd
-####################################################
+############################################################
+# scanbd
+############################################################
 
 echo
 echo "============================"
 echo "Starting scanbd"
 echo "============================"
 
-exec scanbd -f -d7 -c /etc/scanbd/scanbd.conf
+exec scanbd -f -c /etc/scanbd/scanbd.conf
