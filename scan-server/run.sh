@@ -117,6 +117,32 @@ scanimage -L || true
 
 echo
 echo "============================"
+echo "HP INFO"
+echo "============================"
+
+hp-info -i || true
+
+echo
+echo "============================"
+echo "HP PROBE"
+echo "============================"
+
+hp-probe -b usb || true
+
+echo
+echo "============================"
+echo "SCANIMAGE DEBUG"
+echo "============================"
+
+export SANE_DEBUG_HPAIO=255
+export SANE_DEBUG_DLL=255
+
+scanimage \
+-d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
+-T || true
+
+echo
+echo "============================"
 echo "HPAIO library"
 echo "============================"
 
