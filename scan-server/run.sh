@@ -117,6 +117,37 @@ scanimage -L || true
 
 echo
 echo "============================"
+echo "HPAIO library"
+echo "============================"
+
+find /usr -name "libsane-hpaio*" 2>/dev/null || true
+find /usr -name "*hpaio*" 2>/dev/null || true
+
+echo
+echo "============================"
+echo "DLL config"
+echo "============================"
+
+cat /etc/sane.d/dll.conf || true
+
+echo
+echo "============================"
+echo "Installed packages"
+echo "============================"
+
+dpkg -l | grep -E "hplip|libsane|sane" || true
+
+echo
+echo "============================"
+echo "TEST OPEN DEVICE"
+echo "============================"
+
+scanimage \
+-d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
+-T || true
+
+echo
+echo "============================"
 echo "HPLIP diagnostics"
 echo "============================"
 
@@ -175,6 +206,27 @@ echo "Try open scanner..."
 scanimage \
 -d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
 --format=pnm >/dev/null || true
+
+echo
+echo "============================"
+echo "USB devices in container"
+echo "============================"
+
+ls -l /dev/bus/usb/*/* || true
+
+echo
+echo "============================"
+echo "USB printer devices"
+echo "============================"
+
+ls -l /dev/usb/* || true
+
+echo
+echo "============================"
+echo "Loaded kernel modules"
+echo "============================"
+
+cat /proc/modules | grep usb || true
 
 sleep 2
 
