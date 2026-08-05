@@ -3,7 +3,7 @@ FROM ${BUILD_FROM}
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-apt-get install -y \
+RUN apt-get install -y \
     curl \
     jq \
     dbus \
