@@ -117,6 +117,31 @@ scanimage -L || true
 
 echo
 echo "============================"
+echo "HPLIP diagnostics"
+echo "============================"
+
+echo "--- hp-info ---"
+which hp-info || true
+hp-info --version || true
+
+echo
+echo "--- libsane-hpaio ---"
+find /usr -name "libsane-hpaio*" 2>/dev/null || true
+
+echo
+echo "--- hpaio files ---"
+find /usr -name "*hpaio*" 2>/dev/null || true
+
+echo
+echo "--- SANE backends ---"
+find /usr/lib -name "libsane-*.so*" 2>/dev/null || true
+
+echo
+echo "--- Installed packages ---"
+dpkg -l | grep -E "hplip|sane|printer-driver" || true
+
+echo
+echo "============================"
 echo "Find scanner"
 echo "============================"
 sane-find-scanner || true
