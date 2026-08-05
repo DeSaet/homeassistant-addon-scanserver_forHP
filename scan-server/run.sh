@@ -113,6 +113,28 @@ echo "============================"
 echo "USB permissions"
 echo "============================"
 
+ls -l /dev/bus/usb/*/* || true
+
+echo
+echo "============================"
+echo "Current user"
+echo "============================"
+
+id
+
+echo
+echo "============================"
+echo "USB ownership"
+echo "============================"
+
+stat /dev/bus/usb/001/003 || true
+
+echo
+echo "============================"
+echo "Groups"
+echo "============================"
+
+cat /etc/group | grep -E "lp|scanner|plugdev|root"
 ls -l /dev/bus/usb/001/003 || true
 
 echo "============================"
