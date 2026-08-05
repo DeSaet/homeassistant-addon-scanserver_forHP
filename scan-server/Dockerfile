@@ -1,9 +1,9 @@
 ARG BUILD_FROM
 FROM ${BUILD_FROM}
 
-LABEL \
-    io.hass.type="addon" \
-    io.hass.arch="aarch64|amd64"
+LABEL io.hass.version="1.0"
+LABEL io.hass.type="addon"
+LABEL io.hass.arch="aarch64|amd64"
 
 ENV \
     TERM=xterm-256color \
