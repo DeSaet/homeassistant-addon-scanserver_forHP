@@ -38,4 +38,4 @@ schema:
   netshare_password: password?
   netshare_path: str?
 
-image: ghcr.io/DeSaet/{arch}-addon-scan-server
+image: ghcr.io/desaet/{arch}-addon-scan-server
