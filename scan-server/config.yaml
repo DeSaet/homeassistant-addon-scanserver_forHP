@@ -37,5 +37,3 @@ schema:
   netshare_username: str?
   netshare_password: password?
   netshare_path: str?
-
-image: ghcr.io/desaet/{arch}-addon-scan-server
