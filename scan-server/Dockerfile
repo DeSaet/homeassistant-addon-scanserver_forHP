@@ -3,17 +3,18 @@ FROM ${BUILD_FROM}
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        curl \
-        jq \
-        dbus \
-        hplip \
-        printer-driver-hpcups \
-        sane-utils \
-        libsane1 \
-        usbutils \
-        nano && \
+apt-get install -y \
+    curl \
+    jq \
+    dbus \
+    udev \
+    libusb-1.0-0 \
+    hplip \
+    printer-driver-hpcups \
+    sane-utils \
+    libsane1 \
+    usbutils \
+    nano && \
     rm -rf /var/lib/apt/lists/*
 
 RUN echo "========== INSTALLED HPAIO ==========" && \
