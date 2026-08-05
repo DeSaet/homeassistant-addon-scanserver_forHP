@@ -30,3 +30,5 @@ COPY setup.sh /setup.sh
 RUN chmod +x /run.sh /setup.sh /usr/bin/get_scan_filename
 
 CMD ["/run.sh"]
+
+udevadm info --version || true
