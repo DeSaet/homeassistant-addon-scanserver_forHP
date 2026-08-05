@@ -2,7 +2,7 @@ name: Scan Server
 slug: scan-server
 description: Use your Home Assistant system as a scan server.
 
-version: "05.08.26_112"
+version: "05.08.26_1906"
 
 startup: services
 boot: auto
