@@ -16,6 +16,11 @@ RUN apt-get update && \
         nano && \
     rm -rf /var/lib/apt/lists/*
 
+RUN echo "========== INSTALLED HPAIO ==========" && \
+    find /usr -name "*hpaio*" || true && \
+    echo "========== SANE LIBS ==========" && \
+    find /usr -name "libsane-*.so*" || true
+
 COPY rootfs /
 
 COPY run.sh /run.sh
