@@ -11,9 +11,17 @@ RUN apt-get update && \
         udev \
         libusb-1.0-0 \
         hplip \
+        hplip-data \
         printer-driver-hpcups \
         sane-utils \
         libsane1 \
+        avahi-daemon \
+        python3 \
+        python3-dbus \
+        python3-lxml \
+        python3-pil \
+        python3-reportlab \
+        python3-pexpect \
         usbutils \
         nano && \
     rm -rf /var/lib/apt/lists/*
