@@ -134,6 +134,23 @@ mkdir -p /var/run/saned
 
 /usr/sbin/saned -a -d128 &
 
+echo
+echo "============================"
+echo "HPAIO DEBUG"
+echo "============================"
+
+export SANE_DEBUG_HPAIO=255
+export SANE_DEBUG_DLL=255
+
+scanimage -L || true
+
+echo
+echo "Try open scanner..."
+
+scanimage \
+-d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
+--format=pnm >/dev/null || true
+
 sleep 2
 
 ############################################################
