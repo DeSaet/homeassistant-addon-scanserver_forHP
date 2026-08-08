@@ -198,6 +198,12 @@ echo "============================"
 find /usr -name "libsane-hpaio*" 2>/dev/null || true
 find /usr -name "*hpaio*" 2>/dev/null || true
 
+echo "=== /etc/sane.d/dll.d/hplip ==="
+cat /etc/sane.d/dll.d/hplip 2>&1 || true
+
+echo "=== /etc/sane.d/dll.conf ==="
+cat /etc/sane.d/dll.conf 2>&1 || true
+
 echo
 echo "============================"
 echo "DLL config"
