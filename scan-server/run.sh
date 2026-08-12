@@ -1,219 +1,273 @@
-#!/bin/bash
+#!/usr/bin/with-contenv bashio
+set -u
 
 echo "########################################"
-echo "### Scan Server diagnostic run.sh"
+echo "### Scan Server starting"
 echo "########################################"
 
+echo ""
 echo "============================"
-echo "SYSTEM"
+echo "Starting dbus-daemon"
 echo "============================"
-uname -a 2>&1
-id 2>&1
+mkdir -p /run/dbus
+dbus-daemon --system --fork || true
 
+echo ""
 echo "============================"
-echo "USB DEVICES"
+echo "USB devices"
 echo "============================"
-lsusb 2>&1
+lsusb || true
 
+echo ""
 echo "============================"
-echo "USB PERMISSIONS"
+echo "Finding HP LaserJet M1536dnf"
 echo "============================"
-ls -l /dev/bus/usb/*/* 2>&1
 
+HP_LINE="$(lsusb -d 03f0:012a 2>/dev/null | head -n 1 || true)"
+
+if [ -z "$HP_LINE" ]; then
+    echo "ERROR: HP device 03f0:012a was not found!"
+    exit 1
+fi
+
+echo "$HP_LINE"
+
+HP_BUS="$(echo "$HP_LINE" | awk '{print $2}')"
+HP_DEV="$(echo "$HP_LINE" | awk '{print $4}' | tr -d ':')"
+
+HP_USB="/dev/bus/usb/${HP_BUS}/${HP_DEV}"
+
+echo ""
+echo "Detected:"
+echo "  Bus:    $HP_BUS"
+echo "  Device: $HP_DEV"
+echo "  Path:   $HP_USB"
+
+echo ""
 echo "============================"
-echo "HP USB DEVICE"
+echo "USB device permissions"
 echo "============================"
+ls -l "$HP_USB" 2>&1 || true
+stat "$HP_USB" 2>&1 || true
+
+echo ""
+echo "============================"
+echo "Current user"
+echo "============================"
+id || true
+
+echo ""
+echo "============================"
+echo "Relevant groups"
+echo "============================"
+getent group lp 2>/dev/null || true
+getent group scanner 2>/dev/null || true
+getent group plugdev 2>/dev/null || true
+
+echo ""
+echo "============================"
+echo "USB descriptor"
+echo "============================"
+timeout 10 lsusb -v -d 03f0:012a 2>&1 || true
+
+echo ""
+echo "============================"
+echo "Finding sysfs device"
+echo "============================"
+
+SYS_DEVICE=""
+
 for d in /sys/bus/usb/devices/*; do
-  [ -f "$d/idVendor" ] || continue
+    [ -f "$d/idVendor" ] || continue
 
-  if [ "$(cat "$d/idVendor" 2>/dev/null)" = "03f0" ] && \
-     [ "$(cat "$d/idProduct" 2>/dev/null)" = "012a" ]; then
+    VID="$(cat "$d/idVendor" 2>/dev/null || true)"
+    PID="$(cat "$d/idProduct" 2>/dev/null || true)"
 
-    echo "HP DEVICE: $d"
-    echo -n "Vendor: "
-    cat "$d/idVendor" 2>/dev/null
-    echo -n "Product: "
-    cat "$d/idProduct" 2>/dev/null
-    echo -n "Manufacturer: "
-    cat "$d/manufacturer" 2>/dev/null
-    echo -n "Product name: "
-    cat "$d/product" 2>/dev/null
-    echo -n "Serial: "
-    cat "$d/serial" 2>/dev/null
-  fi
+    if [ "$VID" = "03f0" ] && [ "$PID" = "012a" ]; then
+        SYS_DEVICE="$d"
+        break
+    fi
 done
 
+if [ -z "$SYS_DEVICE" ]; then
+    echo "ERROR: HP device was not found in /sys/bus/usb/devices"
+else
+    echo "SYS_DEVICE=$SYS_DEVICE"
+
+    echo ""
+    echo "--- Device information ---"
+
+    for f in \
+        idVendor \
+        idProduct \
+        manufacturer \
+        product \
+        serial \
+        busnum \
+        devnum \
+        speed \
+        bNumConfigurations \
+        bConfigurationValue \
+        authorized
+    do
+        if [ -f "$SYS_DEVICE/$f" ]; then
+            echo -n "$f: "
+            cat "$SYS_DEVICE/$f" 2>/dev/null || true
+        fi
+    done
+
+    echo ""
+    echo "============================"
+    echo "USB interfaces"
+    echo "============================"
+
+    for i in "${SYS_DEVICE}":*; do
+        [ -d "$i" ] || continue
+
+        echo "----------------------------"
+        echo "Interface path: $i"
+
+        echo -n "Interface number: "
+        cat "$i/bInterfaceNumber" 2>/dev/null || true
+
+        echo -n "Class: "
+        cat "$i/bInterfaceClass" 2>/dev/null || true
+
+        echo -n "Subclass: "
+        cat "$i/bInterfaceSubClass" 2>/dev/null || true
+
+        echo -n "Protocol: "
+        cat "$i/bInterfaceProtocol" 2>/dev/null || true
+
+        echo -n "Endpoints: "
+        cat "$i/bNumEndpoints" 2>/dev/null || true
+
+        echo -n "Driver: "
+        if [ -L "$i/driver" ]; then
+            readlink "$i/driver" 2>/dev/null || true
+        else
+            echo "NONE"
+        fi
+
+        for e in "$i"/ep_*; do
+            [ -e "$e" ] || continue
+
+            echo "  Endpoint: $(basename "$e")"
+
+            echo -n "    Address: "
+            cat "$e/bEndpointAddress" 2>/dev/null || true
+
+            echo -n "    Attributes: "
+            cat "$e/bmAttributes" 2>/dev/null || true
+
+            echo -n "    Max packet: "
+            cat "$e/wMaxPacketSize" 2>/dev/null || true
+
+            echo -n "    Type: "
+            cat "$e/type" 2>/dev/null || true
+        done
+    done
+fi
+
+echo ""
 echo "============================"
-echo "HP USB INTERFACES"
+echo "Kernel modules"
+echo "============================"
+grep -E 'usblp|usbcore|xhci|dwc2' /proc/modules 2>/dev/null || true
+
+echo ""
+echo "============================"
+echo "HPLIP versions"
+echo "============================"
+dpkg -l 2>/dev/null | grep -E 'hplip|libsane-hpaio|sane-utils' || true
+
+echo ""
+echo "============================"
+echo "HPLIP device discovery"
 echo "============================"
 
-for i in /sys/bus/usb/devices/1-1.3:1.*; do
-  [ -d "$i" ] || continue
+timeout 15 hp-probe -b usb 2>&1 || true
 
-  echo "=============================="
-  echo "INTERFACE: $i"
-
-  echo -n "Number:   "
-  cat "$i/bInterfaceNumber" 2>/dev/null
-
-  echo -n "Class:    "
-  cat "$i/bInterfaceClass" 2>/dev/null
-
-  echo -n "Subclass: "
-  cat "$i/bInterfaceSubClass" 2>/dev/null
-
-  echo -n "Protocol: "
-  cat "$i/bInterfaceProtocol" 2>/dev/null
-
-  echo -n "Driver:   "
-  readlink "$i/driver" 2>/dev/null || echo "NONE"
-
-  echo -n "Endpoints: "
-  cat "$i/bNumEndpoints" 2>/dev/null
-
-  for e in "$i"/ep_*; do
-    [ -e "$e" ] || continue
-
-    echo -n "  "
-    basename "$e"
-
-    echo -n "    maxpacket: "
-    cat "$e/wMaxPacketSize" 2>/dev/null
-
-    echo -n "    type: "
-    cat "$e/type" 2>/dev/null
-  done
-done
-
+echo ""
 echo "============================"
-echo "HPLIP VERSION"
-echo "============================"
-
-hp-info --version 2>&1 || true
-
-dpkg -l 2>/dev/null | grep -E 'hplip|libsane|sane' || true
-
-echo "============================"
-echo "SANE CONFIG"
+echo "SANE configuration"
 echo "============================"
 
 echo "--- /etc/sane.d/dll.conf ---"
-cat /etc/sane.d/dll.conf 2>&1
+cat /etc/sane.d/dll.conf 2>&1 || true
 
-echo "--- /etc/sane.d/dll.d/hplip ---"
-cat /etc/sane.d/dll.d/hplip 2>&1
+echo ""
+echo "--- /etc/sane.d/dll.d ---"
+find /etc/sane.d/dll.d -maxdepth 1 -type f -print -exec cat {} \; 2>&1 || true
 
+echo ""
 echo "============================"
-echo "SANE DEVICES"
+echo "Scanner detection"
 echo "============================"
+
+timeout 20 sane-find-scanner -v 2>&1 || true
+
+echo ""
+echo "--- scanimage -L ---"
+timeout 20 scanimage -L 2>&1 || true
+
+HP_URI="hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M"
+
+echo ""
+echo "============================"
+echo "HPAIO OPEN TEST"
+echo "============================"
+echo "Device: $HP_URI"
+echo "Timeout: 15 seconds"
+echo ""
 
 SANE_DEBUG_DLL=255 \
 SANE_DEBUG_HPAIO=255 \
-scanimage -L 2>&1
+timeout 15 scanimage -d "$HP_URI" --help 2>&1 || true
 
+echo ""
 echo "============================"
-echo "HP PROBE"
+echo "HPAIO REAL SCAN TEST"
 echo "============================"
+echo "Timeout: 30 seconds"
+echo ""
 
-hp-probe -b usb -c 1 2>&1 || true
+rm -f /tmp/hp-test.pnm
 
-echo "============================"
-echo "HPLIP SCAN PLUGINS"
-echo "============================"
+SANE_DEBUG_DLL=255 \
+SANE_DEBUG_HPAIO=255 \
+timeout 30 scanimage \
+    -d "$HP_URI" \
+    --format=pnm \
+    --resolution 75 \
+    > /tmp/hp-test.pnm 2>&1
 
-echo "--- /usr/share/hplip/scan/plugins ---"
+SCAN_RC=$?
 
-find /usr/share/hplip/scan/plugins \
-  -maxdepth 2 \
-  -type f \
-  -ls 2>&1 || true
+echo ""
+echo "Scan command exit code: $SCAN_RC"
 
-echo "============================"
-echo "SOAPHT / HPMUD FILES"
-echo "============================"
-
-find / \
-  -type f \
-  \( -iname '*soapht*' -o -iname '*hpmud*' \) \
-  2>/dev/null
-
-echo "============================"
-echo "HPLIP PLUGIN STATUS"
-echo "============================"
-
-if command -v hp-plugin >/dev/null 2>&1; then
-  hp-plugin -s 2>&1 || true
+if [ -f /tmp/hp-test.pnm ]; then
+    echo "Scan output exists:"
+    ls -lh /tmp/hp-test.pnm
 else
-  echo "hp-plugin command NOT FOUND"
+    echo "No scan output file created"
 fi
 
+echo ""
 echo "============================"
-echo "HPLIP CONFIG / STATE"
-echo "============================"
-
-echo "--- /etc/hp/hplip.conf ---"
-cat /etc/hp/hplip.conf 2>&1 || true
-
-echo "--- /var/lib/hp/hplip.state ---"
-cat /var/lib/hp/hplip.state 2>&1 || true
-
-echo "============================"
-echo "HPAIO LIBRARY"
+echo "Final USB state"
 echo "============================"
 
-ls -l \
-  /usr/lib/aarch64-linux-gnu/sane/libsane-hpaio.so* \
-  2>&1
+lsusb -d 03f0:012a 2>&1 || true
+ls -l "$HP_USB" 2>&1 || true
 
-ldd \
-  /usr/lib/aarch64-linux-gnu/sane/libsane-hpaio.so.1 \
-  2>&1 || true
-
+echo ""
 echo "============================"
-echo "TEST OPEN DEVICE"
+echo "DONE"
 echo "============================"
 
-DEVICE="hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M"
+echo ""
+echo "Diagnostics finished."
 
-SANE_DEBUG_DLL=255 \
-SANE_DEBUG_HPAIO=255 \
-scanimage -d "$DEVICE" -A 2>&1
-
-echo "============================"
-echo "TEST SCAN OPEN"
-echo "============================"
-
-SANE_DEBUG_DLL=255 \
-SANE_DEBUG_HPAIO=255 \
-scanimage \
-  -d "$DEVICE" \
-  --format=pnm \
-  --mode Gray \
-  --resolution 75 \
-  -o /tmp/hp_test.pnm \
-  2>&1 || true
-
-echo "============================"
-echo "TEST FILE"
-echo "============================"
-
-ls -lh /tmp/hp_test.pnm 2>&1 || true
-file /tmp/hp_test.pnm 2>&1 || true
-
-echo "============================"
-echo "KERNEL USB LOG"
-echo "============================"
-
-dmesg | tail -150 | \
-grep -Ei 'usb|03f0|012a|reset|error|stall|xhci' \
-2>&1 || true
-
-echo "============================"
-echo "USB TREE"
-echo "============================"
-
-ls -l /sys/bus/usb/devices/ 2>&1
-
-echo "########################################"
-echo "### DIAGNOSTIC RUN FINISHED"
-echo "########################################"
+exit 0
