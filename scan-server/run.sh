@@ -1,686 +1,219 @@
-#!/usr/bin/with-contenv bashio
-set +e
+#!/bin/bash
 
 echo "########################################"
-echo "### Scan Server starting"
+echo "### Scan Server diagnostic run.sh"
 echo "########################################"
 
-###############################################################################
-# DBUS
-###############################################################################
-
-echo
 echo "============================"
-echo "STARTING DBUS"
+echo "SYSTEM"
 echo "============================"
+uname -a 2>&1
+id 2>&1
 
-mkdir -p /run/dbus
-
-if ! pgrep -x dbus-daemon >/dev/null 2>&1; then
-    dbus-daemon --system --fork 2>&1 || true
-fi
-
-sleep 2
-
-
-###############################################################################
-# USB DEVICE LIST
-###############################################################################
-
-echo
 echo "============================"
 echo "USB DEVICES"
 echo "============================"
+lsusb 2>&1
 
-if command -v lsusb >/dev/null 2>&1; then
-    lsusb
-else
-    echo "WARNING: lsusb not found"
-fi
-
-
-###############################################################################
-# FIND HP
-###############################################################################
-
-echo
 echo "============================"
-echo "SEARCHING FOR HP 03F0:012A"
+echo "USB PERMISSIONS"
 echo "============================"
+ls -l /dev/bus/usb/*/* 2>&1
 
-HP_BUS=""
-HP_DEVICE=""
-HP_DEV=""
-HP_SYSDEV=""
-
-if command -v lsusb >/dev/null 2>&1; then
-
-    HP_LINE="$(lsusb | grep -i '03f0:012a' | head -n 1)"
-
-    if [ -n "$HP_LINE" ]; then
-
-        echo "Found:"
-        echo "$HP_LINE"
-
-        HP_BUS="$(echo "$HP_LINE" | awk '{print $2}')"
-        HP_DEVICE="$(echo "$HP_LINE" | awk '{print $4}' | tr -d ':')"
-
-        HP_DEV="/dev/bus/usb/${HP_BUS}/${HP_DEVICE}"
-
-        echo "Bus:       $HP_BUS"
-        echo "Device:    $HP_DEVICE"
-        echo "USB node:  $HP_DEV"
-
-    else
-
-        echo "ERROR: HP 03f0:012a not found"
-
-    fi
-
-fi
-
-
-###############################################################################
-# FIND REAL SYSFS PATH
-###############################################################################
-
-echo
 echo "============================"
-echo "HP SYSFS DEVICE"
+echo "HP USB DEVICE"
 echo "============================"
+for d in /sys/bus/usb/devices/*; do
+  [ -f "$d/idVendor" ] || continue
 
-for DEV in /sys/bus/usb/devices/*; do
+  if [ "$(cat "$d/idVendor" 2>/dev/null)" = "03f0" ] && \
+     [ "$(cat "$d/idProduct" 2>/dev/null)" = "012a" ]; then
 
-    [ -f "$DEV/idVendor" ] || continue
-    [ -f "$DEV/idProduct" ] || continue
-
-    VID="$(cat "$DEV/idVendor" 2>/dev/null)"
-    PID="$(cat "$DEV/idProduct" 2>/dev/null)"
-
-    if [ "$VID" = "03f0" ] && [ "$PID" = "012a" ]; then
-
-        HP_SYSDEV="$DEV"
-        break
-
-    fi
-
+    echo "HP DEVICE: $d"
+    echo -n "Vendor: "
+    cat "$d/idVendor" 2>/dev/null
+    echo -n "Product: "
+    cat "$d/idProduct" 2>/dev/null
+    echo -n "Manufacturer: "
+    cat "$d/manufacturer" 2>/dev/null
+    echo -n "Product name: "
+    cat "$d/product" 2>/dev/null
+    echo -n "Serial: "
+    cat "$d/serial" 2>/dev/null
+  fi
 done
 
-if [ -n "$HP_SYSDEV" ]; then
-
-    echo "HP sysfs path:"
-    echo "$HP_SYSDEV"
-
-    echo
-    echo "Device attributes:"
-
-    for ATTR in \
-        busnum \
-        devnum \
-        idVendor \
-        idProduct \
-        manufacturer \
-        product \
-        serial \
-        authorized
-    do
-
-        if [ -f "$HP_SYSDEV/$ATTR" ]; then
-            echo -n "$ATTR: "
-            cat "$HP_SYSDEV/$ATTR"
-        fi
-
-    done
-
-else
-
-    echo "ERROR: HP sysfs device not found"
-
-fi
-
-
-###############################################################################
-# DETAILED USB DESCRIPTORS
-###############################################################################
-
-echo
-echo "============================"
-echo "USB DESCRIPTORS"
-echo "============================"
-
-if command -v lsusb >/dev/null 2>&1; then
-
-    lsusb -v -d 03f0:012a 2>&1 || true
-
-else
-
-    echo "lsusb not available"
-
-fi
-
-
-###############################################################################
-# USB DEVICE NODE
-###############################################################################
-
-echo
-echo "============================"
-echo "HP USB DEVICE NODE"
-echo "============================"
-
-if [ -n "$HP_DEV" ]; then
-
-    if [ -e "$HP_DEV" ]; then
-
-        ls -l "$HP_DEV"
-
-        echo
-        echo "fuser:"
-
-        if command -v fuser >/dev/null 2>&1; then
-            fuser -v "$HP_DEV" 2>&1 || true
-        else
-            echo "fuser not installed"
-        fi
-
-        echo
-        echo "Attempting chmod 666..."
-
-        chmod 666 "$HP_DEV" 2>&1 || true
-
-        echo
-        echo "After chmod:"
-
-        ls -l "$HP_DEV"
-
-    else
-
-        echo "ERROR: device node does not exist:"
-        echo "$HP_DEV"
-
-    fi
-
-fi
-
-
-###############################################################################
-# USB INTERFACES
-###############################################################################
-
-echo
 echo "============================"
 echo "HP USB INTERFACES"
 echo "============================"
 
-if [ -n "$HP_SYSDEV" ]; then
+for i in /sys/bus/usb/devices/1-1.3:1.*; do
+  [ -d "$i" ] || continue
 
-    for IFACE_PATH in "${HP_SYSDEV}":1.*; do
+  echo "=============================="
+  echo "INTERFACE: $i"
 
-        [ -d "$IFACE_PATH" ] || continue
+  echo -n "Number:   "
+  cat "$i/bInterfaceNumber" 2>/dev/null
 
-        echo
-        echo "----------------------------------------"
-        echo "Interface: $(basename "$IFACE_PATH")"
-        echo "----------------------------------------"
+  echo -n "Class:    "
+  cat "$i/bInterfaceClass" 2>/dev/null
 
-        for ATTR in \
-            bInterfaceNumber \
-            bAlternateSetting \
-            bNumEndpoints \
-            bInterfaceClass \
-            bInterfaceSubClass \
-            bInterfaceProtocol \
-            authorized \
-            interface \
-            modalias
-        do
+  echo -n "Subclass: "
+  cat "$i/bInterfaceSubClass" 2>/dev/null
 
-            if [ -f "$IFACE_PATH/$ATTR" ]; then
-                echo -n "$ATTR: "
-                cat "$IFACE_PATH/$ATTR"
-            fi
+  echo -n "Protocol: "
+  cat "$i/bInterfaceProtocol" 2>/dev/null
 
-        done
+  echo -n "Driver:   "
+  readlink "$i/driver" 2>/dev/null || echo "NONE"
 
-        if [ -L "$IFACE_PATH/driver" ]; then
+  echo -n "Endpoints: "
+  cat "$i/bNumEndpoints" 2>/dev/null
 
-            echo -n "driver: "
-            readlink "$IFACE_PATH/driver"
+  for e in "$i"/ep_*; do
+    [ -e "$e" ] || continue
 
-        else
+    echo -n "  "
+    basename "$e"
 
-            echo "driver: NONE"
+    echo -n "    maxpacket: "
+    cat "$e/wMaxPacketSize" 2>/dev/null
 
-        fi
+    echo -n "    type: "
+    cat "$e/type" 2>/dev/null
+  done
+done
 
-        echo
-        echo "Endpoints:"
-
-        for EP in "$IFACE_PATH"/ep_*; do
-
-            [ -d "$EP" ] || continue
-
-            echo "  $(basename "$EP")"
-
-            for ATTR in \
-                bEndpointAddress \
-                bmAttributes \
-                wMaxPacketSize \
-                bInterval
-            do
-
-                if [ -f "$EP/$ATTR" ]; then
-                    echo -n "    $ATTR: "
-                    cat "$EP/$ATTR"
-                fi
-            done
-
-        done
-
-    done
-
-fi
-
-
-###############################################################################
-# CHECK USB AUTHORIZATION
-###############################################################################
-
-echo
 echo "============================"
-echo "USB AUTHORIZATION"
+echo "HPLIP VERSION"
 echo "============================"
 
-if [ -n "$HP_SYSDEV" ]; then
+hp-info --version 2>&1 || true
 
-    if [ -f "$HP_SYSDEV/authorized" ]; then
+dpkg -l 2>/dev/null | grep -E 'hplip|libsane|sane' || true
 
-        echo -n "Device authorized: "
-        cat "$HP_SYSDEV/authorized"
-
-        if [ "$(cat "$HP_SYSDEV/authorized")" != "1" ]; then
-
-            echo "Attempting to authorize device..."
-
-            echo 1 > "$HP_SYSDEV/authorized" 2>&1 || true
-
-            echo -n "After attempt: "
-            cat "$HP_SYSDEV/authorized"
-
-        fi
-
-    fi
-
-    for IFACE_PATH in "${HP_SYSDEV}":1.*; do
-
-        [ -d "$IFACE_PATH" ] || continue
-
-        if [ -f "$IFACE_PATH/authorized" ]; then
-
-            echo -n "$(basename "$IFACE_PATH") authorized: "
-            cat "$IFACE_PATH/authorized"
-
-        fi
-
-    done
-
-fi
-
-
-###############################################################################
-# KERNEL MODULES
-###############################################################################
-
-echo
 echo "============================"
-echo "KERNEL USB MODULES"
-echo "============================"
-
-if command -v lsmod >/dev/null 2>&1; then
-
-    lsmod | grep -E 'usblp|usb' || true
-
-fi
-
-
-###############################################################################
-# CHECK USBLP
-###############################################################################
-
-echo
-echo "============================"
-echo "CHECKING USBLP"
-echo "============================"
-
-USBLP_FOUND=0
-
-if [ -n "$HP_SYSDEV" ]; then
-
-    for IFACE_PATH in "${HP_SYSDEV}":1.*; do
-
-        [ -d "$IFACE_PATH" ] || continue
-
-        IFACE_NAME="$(basename "$IFACE_PATH")"
-
-        if [ -L "$IFACE_PATH/driver" ]; then
-
-            DRIVER_NAME="$(basename "$(readlink "$IFACE_PATH/driver")")"
-
-            echo "$IFACE_NAME -> $DRIVER_NAME"
-
-            if [ "$DRIVER_NAME" = "usblp" ]; then
-
-                USBLP_FOUND=1
-
-                echo "Attempting to unbind usblp..."
-
-                DRIVER_UNBIND="$(dirname "$(readlink -f "$IFACE_PATH/driver")")/unbind"
-
-                if [ -w "$DRIVER_UNBIND" ]; then
-
-                    echo -n "$IFACE_NAME" > "$DRIVER_UNBIND" 2>&1
-
-                    echo "Unbind command executed."
-
-                else
-
-                    echo "Cannot write to:"
-                    echo "$DRIVER_UNBIND"
-
-                fi
-
-            fi
-
-        else
-
-            echo "$IFACE_NAME -> no kernel driver"
-
-        fi
-
-    done
-
-fi
-
-if [ "$USBLP_FOUND" -eq 0 ]; then
-    echo "usblp is not attached to any HP interface."
-fi
-
-
-###############################################################################
-# CURRENT USER
-###############################################################################
-
-echo
-echo "============================"
-echo "CURRENT USER"
-echo "============================"
-
-id
-
-echo
-echo "Groups:"
-
-id -nG 2>&1 || true
-
-
-###############################################################################
-# HPLIP
-###############################################################################
-
-echo
-echo "============================"
-echo "HPLIP USB PROBE"
-echo "============================"
-
-if command -v hp-probe >/dev/null 2>&1; then
-
-    hp-probe -b usb 2>&1 || true
-
-else
-
-    echo "hp-probe not found"
-
-fi
-
-
-###############################################################################
-# SANE CONFIG
-###############################################################################
-
-echo
-echo "============================"
-echo "SANE CONFIGURATION"
+echo "SANE CONFIG"
 echo "============================"
 
 echo "--- /etc/sane.d/dll.conf ---"
+cat /etc/sane.d/dll.conf 2>&1
 
-if [ -f /etc/sane.d/dll.conf ]; then
-    cat /etc/sane.d/dll.conf
+echo "--- /etc/sane.d/dll.d/hplip ---"
+cat /etc/sane.d/dll.d/hplip 2>&1
+
+echo "============================"
+echo "SANE DEVICES"
+echo "============================"
+
+SANE_DEBUG_DLL=255 \
+SANE_DEBUG_HPAIO=255 \
+scanimage -L 2>&1
+
+echo "============================"
+echo "HP PROBE"
+echo "============================"
+
+hp-probe -b usb -c 1 2>&1 || true
+
+echo "============================"
+echo "HPLIP SCAN PLUGINS"
+echo "============================"
+
+echo "--- /usr/share/hplip/scan/plugins ---"
+
+find /usr/share/hplip/scan/plugins \
+  -maxdepth 2 \
+  -type f \
+  -ls 2>&1 || true
+
+echo "============================"
+echo "SOAPHT / HPMUD FILES"
+echo "============================"
+
+find / \
+  -type f \
+  \( -iname '*soapht*' -o -iname '*hpmud*' \) \
+  2>/dev/null
+
+echo "============================"
+echo "HPLIP PLUGIN STATUS"
+echo "============================"
+
+if command -v hp-plugin >/dev/null 2>&1; then
+  hp-plugin -s 2>&1 || true
 else
-    echo "NOT FOUND"
+  echo "hp-plugin command NOT FOUND"
 fi
 
-echo
-echo "--- /etc/sane.d/dll.d ---"
-
-ls -la /etc/sane.d/dll.d 2>&1 || true
-
-
-###############################################################################
-# SANE FIND SCANNER
-###############################################################################
-
-echo
 echo "============================"
-echo "SANE FIND SCANNER"
+echo "HPLIP CONFIG / STATE"
 echo "============================"
 
-if command -v sane-find-scanner >/dev/null 2>&1; then
+echo "--- /etc/hp/hplip.conf ---"
+cat /etc/hp/hplip.conf 2>&1 || true
 
-    sane-find-scanner -v 2>&1 || true
+echo "--- /var/lib/hp/hplip.state ---"
+cat /var/lib/hp/hplip.state 2>&1 || true
 
-else
-
-    echo "sane-find-scanner not found"
-
-fi
-
-
-###############################################################################
-# SANE DEVICE LIST
-###############################################################################
-
-echo
 echo "============================"
-echo "SCANIMAGE -L"
+echo "HPAIO LIBRARY"
 echo "============================"
 
-if command -v scanimage >/dev/null 2>&1; then
+ls -l \
+  /usr/lib/aarch64-linux-gnu/sane/libsane-hpaio.so* \
+  2>&1
 
-    export SANE_DEBUG_DLL=128
-    export SANE_DEBUG_HPAIO=255
+ldd \
+  /usr/lib/aarch64-linux-gnu/sane/libsane-hpaio.so.1 \
+  2>&1 || true
 
-    scanimage -L 2>&1 || true
-
-else
-
-    echo "scanimage not found"
-
-fi
-
-
-###############################################################################
-# DIRECT OPEN TEST
-###############################################################################
-
-echo
 echo "============================"
-echo "DIRECT HP SCANNER OPEN TEST"
+echo "TEST OPEN DEVICE"
 echo "============================"
 
-HP_SCANNER="hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M"
+DEVICE="hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M"
 
-echo "Device:"
-echo "$HP_SCANNER"
+SANE_DEBUG_DLL=255 \
+SANE_DEBUG_HPAIO=255 \
+scanimage -d "$DEVICE" -A 2>&1
 
-if command -v scanimage >/dev/null 2>&1; then
-
-    echo
-    echo "--- get-device-descriptors ---"
-
-    scanimage \
-        --device-name="$HP_SCANNER" \
-        --get-device-descriptors \
-        2>&1 || true
-
-    echo
-    echo "--- test scan parameters ---"
-
-    scanimage \
-        --device-name="$HP_SCANNER" \
-        --format=pnm \
-        --resolution 75 \
-        --mode Gray \
-        --source Flatbed \
-        --progress \
-        > /tmp/hp-test-scan.pnm 2>/tmp/hp-test-scan.log
-
-    SCAN_RESULT=$?
-
-    echo "Scan exit code: $SCAN_RESULT"
-
-    echo
-    echo "--- stderr ---"
-
-    cat /tmp/hp-test-scan.log 2>/dev/null || true
-
-    if [ -f /tmp/hp-test-scan.pnm ]; then
-
-        echo
-        echo "--- output file ---"
-
-        ls -lh /tmp/hp-test-scan.pnm
-
-    fi
-
-fi
-
-
-###############################################################################
-# START SANED
-###############################################################################
-
-echo
 echo "============================"
-echo "STARTING SANED"
+echo "TEST SCAN OPEN"
 echo "============================"
 
-if command -v saned >/dev/null 2>&1; then
+SANE_DEBUG_DLL=255 \
+SANE_DEBUG_HPAIO=255 \
+scanimage \
+  -d "$DEVICE" \
+  --format=pnm \
+  --mode Gray \
+  --resolution 75 \
+  -o /tmp/hp_test.pnm \
+  2>&1 || true
 
-    if [ -f /etc/services ]; then
-
-        grep -q '^sane-streamtcp' /etc/services 2>/dev/null || \
-            echo "sane-streamtcp 6566/tcp" >> /etc/services
-
-    fi
-
-    echo "Starting saned..."
-
-    saned -d -l 2>&1 &
-
-    SANED_PID=$!
-
-    sleep 2
-
-    echo "saned PID: $SANED_PID"
-
-    if kill -0 "$SANED_PID" 2>/dev/null; then
-        echo "saned is running"
-    else
-        echo "WARNING: saned process exited"
-    fi
-
-else
-
-    echo "ERROR: saned not found"
-
-fi
-
-
-###############################################################################
-# FINAL SANE CHECK
-###############################################################################
-
-echo
 echo "============================"
-echo "FINAL SANE CHECK"
+echo "TEST FILE"
 echo "============================"
 
-if command -v scanimage >/dev/null 2>&1; then
+ls -lh /tmp/hp_test.pnm 2>&1 || true
+file /tmp/hp_test.pnm 2>&1 || true
 
-    scanimage -L 2>&1 || true
-
-fi
-
-
-###############################################################################
-# FINAL USB STATUS
-###############################################################################
-
-echo
 echo "============================"
-echo "FINAL USB STATUS"
+echo "KERNEL USB LOG"
 echo "============================"
 
-if command -v lsusb >/dev/null 2>&1; then
-    lsusb
-fi
+dmesg | tail -150 | \
+grep -Ei 'usb|03f0|012a|reset|error|stall|xhci' \
+2>&1 || true
 
-if [ -n "$HP_DEV" ]; then
+echo "============================"
+echo "USB TREE"
+echo "============================"
 
-    echo
-    echo "HP device node:"
+ls -l /sys/bus/usb/devices/ 2>&1
 
-    ls -l "$HP_DEV" 2>&1 || true
-
-fi
-
-if [ -n "$HP_SYSDEV" ]; then
-
-    echo
-    echo "HP sysfs path:"
-    echo "$HP_SYSDEV"
-
-    echo
-    echo "Drivers after tests:"
-
-    for IFACE_PATH in "${HP_SYSDEV}":1.*; do
-
-        [ -d "$IFACE_PATH" ] || continue
-
-        echo -n "$(basename "$IFACE_PATH"): "
-
-        if [ -L "$IFACE_PATH/driver" ]; then
-            readlink "$IFACE_PATH/driver"
-        else
-            echo "NONE"
-        fi
-
-    done
-
-fi
-
-
-echo
 echo "########################################"
-echo "### Scan Server running"
+echo "### DIAGNOSTIC RUN FINISHED"
 echo "########################################"
-
-
-###############################################################################
-# KEEP ADD-ON ALIVE
-###############################################################################
-
-while true; do
-    sleep 3600
-done
