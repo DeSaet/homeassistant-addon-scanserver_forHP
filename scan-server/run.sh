@@ -1,350 +1,459 @@
 #!/usr/bin/with-contenv bashio
-
-set -e
+set +e
 
 echo "########################################"
 echo "### Scan Server starting"
 echo "########################################"
 
-chmod +x /usr/bin/get_scan_filename || true
+echo
+echo "============================"
+echo "Starting dbus-daemon"
+echo "============================"
 
-############################################################
-# DBUS
-############################################################
-
-echo "Starting dbus-daemon..."
 mkdir -p /run/dbus
-dbus-daemon --system
 
-############################################################
-# sane-scan-pdf
-############################################################
-
-mkdir -p /config/sane-scan-pdf
-
-[ -f /config/sane-scan-pdf/defaults ] || \
-    cp /opt/sane-scan-pdf/defaults /config/sane-scan-pdf/defaults
-
-[ -f /config/sane-scan-pdf/scan_pre ] || \
-    cp /opt/sane-scan-pdf/scan_pre /config/sane-scan-pdf/scan_pre
-
-rm -f /opt/sane-scan-pdf/defaults
-rm -f /opt/sane-scan-pdf/scan_pre
-
-ln -s /config/sane-scan-pdf/defaults /opt/sane-scan-pdf/defaults
-ln -s /config/sane-scan-pdf/scan_pre /opt/sane-scan-pdf/scan_pre
-
-chmod +x /config/sane-scan-pdf/defaults
-chmod +x /config/sane-scan-pdf/scan_pre
-
-############################################################
-# Config files
-############################################################
-
-mkdir -p /config
-
-if [ ! -f /config/dll.conf ]; then
-    cp /etc/sane.d/dll.conf /config/dll.conf
+if [ ! -f /run/dbus/pid ]; then
+    dbus-daemon --system --fork
 fi
 
-rm -f /etc/sane.d/dll.conf
-ln -s /config/dll.conf /etc/sane.d/dll.conf
+sleep 2
 
-if [ ! -f /config/saned.conf ]; then
-cat >/config/saned.conf <<EOF
-localhost
-127.0.0.1
-::1
-192.168.0.0/16
-10.0.0.0/8
-172.16.0.0/12
-EOF
-fi
-
-rm -f /etc/sane.d/saned.conf
-ln -s /config/saned.conf /etc/sane.d/saned.conf
-
-############################################################
-# scanbd config
-############################################################
-
-if [ ! -f /config/scanbd.conf ]; then
-    cp /etc/scanbd/scanbd.conf /config/scanbd.conf
-fi
-
-rm -f /etc/scanbd/scanbd.conf
-ln -s /config/scanbd.conf /etc/scanbd/scanbd.conf
-
-############################################################
-# scripts
-############################################################
-
-mkdir -p /config/scripts
-
-if [ ! -f /config/scripts/scan.script ]; then
-    cp /src/scripts/scan.script /config/scripts/scan.script
-fi
-
-chmod +x /config/scripts/scan.script
-
-rm -rf /etc/scanbd/scripts
-ln -s /config/scripts /etc/scanbd/scripts
-
-############################################################
-# Home Assistant integration
-############################################################
-
-if [ ! -d /homeassistant/custom_components/scan_server_integration ]; then
-    mkdir -p /homeassistant/custom_components/scan_server_integration
-    cp -r /custom_components/scan_server_integration/* \
-        /homeassistant/custom_components/scan_server_integration/
-fi
-
-############################################################
-# Diagnostics
-############################################################
-
-echo "============================"
-echo "USB devices"
-echo "============================"
-lsusb || true
-
-echo "============================"
-echo "USB permissions"
-echo "============================"
-
-ls -l /dev/bus/usb/*/* || true
 
 echo
 echo "============================"
-echo "Current user"
+echo "USB DEVICES - HOST VIEW"
+echo "============================"
+
+if command -v lsusb >/dev/null 2>&1; then
+    lsusb
+else
+    echo "WARNING: lsusb not found"
+fi
+
+
+echo
+echo "============================"
+echo "SEARCHING FOR HP M1536dnf"
+echo "============================"
+
+HP_BUS=""
+HP_DEVICE=""
+HP_SYSDEV=""
+
+if command -v lsusb >/dev/null 2>&1; then
+
+    HP_LINE="$(lsusb | grep -i '03f0:012a' | head -n 1)"
+
+    if [ -n "$HP_LINE" ]; then
+        echo "HP USB device:"
+        echo "$HP_LINE"
+
+        HP_BUS="$(echo "$HP_LINE" | awk '{print $2}')"
+        HP_DEVICE="$(echo "$HP_LINE" | awk '{print $4}' | tr -d ':')"
+
+        echo "USB bus:    $HP_BUS"
+        echo "USB device: $HP_DEVICE"
+
+        HP_SYSDEV="/sys/bus/usb/devices/1-1.3"
+
+    else
+        echo "WARNING: HP LaserJet M1536dnf was not found by lsusb"
+    fi
+fi
+
+
+echo
+echo "============================"
+echo "USB SYSFS"
+echo "============================"
+
+if [ -d "$HP_SYSDEV" ]; then
+
+    echo "HP sysfs device: $HP_SYSDEV"
+
+    echo
+    echo "Interfaces:"
+
+    for IFACE in 0 1 2 3; do
+
+        IFACE_PATH="${HP_SYSDEV}:1.${IFACE}"
+
+        if [ -d "$IFACE_PATH" ]; then
+
+            echo "----- interface $IFACE -----"
+
+            if [ -f "$IFACE_PATH/bInterfaceNumber" ]; then
+                echo -n "number:   "
+                cat "$IFACE_PATH/bInterfaceNumber"
+            fi
+
+            if [ -f "$IFACE_PATH/bInterfaceClass" ]; then
+                echo -n "class:    "
+                cat "$IFACE_PATH/bInterfaceClass"
+            fi
+
+            if [ -f "$IFACE_PATH/bInterfaceSubClass" ]; then
+                echo -n "subclass: "
+                cat "$IFACE_PATH/bInterfaceSubClass"
+            fi
+
+            if [ -f "$IFACE_PATH/bInterfaceProtocol" ]; then
+                echo -n "protocol: "
+                cat "$IFACE_PATH/bInterfaceProtocol"
+            fi
+
+            if [ -L "$IFACE_PATH/driver" ]; then
+                echo -n "driver:   "
+                readlink "$IFACE_PATH/driver"
+            else
+                echo "driver:   NONE"
+            fi
+
+        fi
+
+    done
+
+else
+
+    echo "HP sysfs device not available inside container"
+
+fi
+
+
+echo
+echo "============================"
+echo "DISABLING USBLP FOR HP"
+echo "============================"
+
+#
+# HP M1536 has:
+#
+# interface 0 = HP scanner/control interface
+# interface 1 = USB printer interface
+#
+# usblp attaches to interface 1.
+#
+# HPLIP uses libusb and may need to detach usblp.
+#
+
+USBLP_UNBOUND=0
+
+for SYSROOT in \
+    /sys/bus/usb/devices \
+    /sys/devices
+do
+
+    if [ -d "$SYSROOT" ]; then
+
+        for IFACE_PATH in \
+            "$SYSROOT"/1-1.3:1.1 \
+            "$SYSROOT"/*/1-1.3:1.1
+        do
+
+            if [ -d "$IFACE_PATH" ]; then
+
+                echo "Found HP printer interface:"
+                echo "$IFACE_PATH"
+
+                if [ -L "$IFACE_PATH/driver" ]; then
+
+                    DRIVER="$(basename "$(readlink "$IFACE_PATH/driver")")"
+
+                    echo "Current driver: $DRIVER"
+
+                    if [ "$DRIVER" = "usblp" ]; then
+
+                        echo "Attempting to unbind usblp..."
+
+                        if [ -w "$IFACE_PATH/driver/unbind" ]; then
+
+                            echo -n "1-1.3:1.1" > "$IFACE_PATH/driver/unbind" 2>/tmp/usblp_unbind_error
+
+                            if [ $? -eq 0 ]; then
+                                echo "SUCCESS: usblp unbound"
+                                USBLP_UNBOUND=1
+                            else
+                                echo "WARNING: unable to unbind usblp"
+                                cat /tmp/usblp_unbind_error
+                            fi
+
+                        else
+
+                            echo "WARNING: driver/unbind is not writable"
+
+                        fi
+
+                    else
+
+                        echo "usblp is not attached"
+
+                    fi
+
+                else
+
+                    echo "No driver attached to interface"
+
+                fi
+
+            fi
+
+        done
+
+    fi
+
+done
+
+
+if [ "$USBLP_UNBOUND" -eq 0 ]; then
+    echo
+    echo "WARNING:"
+    echo "usblp could not be detached from inside the container."
+    echo "Continuing anyway."
+    echo
+fi
+
+
+echo
+echo "============================"
+echo "USB DEVICES AFTER USBLP"
+echo "============================"
+
+if command -v lsusb >/dev/null 2>&1; then
+    lsusb
+fi
+
+
+echo
+echo "============================"
+echo "USB DEVICE PERMISSIONS"
+echo "============================"
+
+if [ -n "$HP_BUS" ] && [ -n "$HP_DEVICE" ]; then
+
+    HP_DEV="/dev/bus/usb/$HP_BUS/$HP_DEVICE"
+
+    echo "Expected HP device:"
+    echo "$HP_DEV"
+
+    if [ -e "$HP_DEV" ]; then
+
+        ls -l "$HP_DEV"
+
+        echo "Setting permissions..."
+
+        chmod 666 "$HP_DEV" 2>/dev/null
+
+        chown root:scanner "$HP_DEV" 2>/dev/null
+
+        ls -l "$HP_DEV"
+
+    else
+
+        echo "WARNING: HP device node does not exist"
+
+    fi
+
+fi
+
+
+echo
+echo "============================"
+echo "CURRENT USER"
 echo "============================"
 
 id
 
-echo
-echo "============================"
-echo "USB ownership"
-echo "============================"
-
-stat /dev/bus/usb/001/003 || true
 
 echo
 echo "============================"
-echo "Groups"
+echo "GROUPS"
 echo "============================"
 
-cat /etc/group | grep -E "lp|scanner|plugdev|root"
-ls -l /dev/bus/usb/001/003 || true
+cat /etc/group | grep -E '^(root|lp|plugdev|scanner|lpadmin):'
 
-echo "============================"
-echo "Processes"
-echo "============================"
-
-ps aux
-
-echo "============================"
-echo "HP processes"
-echo "============================"
-
-pgrep -a hp || true
-pgrep -a cups || true
-pgrep -a ipp || true
-pgrep -a scan || true
-
-echo "============================"
-echo "USB device"
-echo "============================"
-
-find /dev/bus/usb -type c -exec ls -l {} \;
 
 echo
 echo "============================"
-echo "Scanner list"
+echo "LOADED KERNEL MODULES"
 echo "============================"
-scanimage -L || true
+
+if command -v lsmod >/dev/null 2>&1; then
+    lsmod | grep -E 'usblp|usb' || true
+fi
+
 
 echo
 echo "============================"
-echo "HP INFO"
+echo "SANE VERSION"
 echo "============================"
 
-hp-info -i || true
+if command -v scanimage >/dev/null 2>&1; then
+    scanimage --version
+else
+    echo "ERROR: scanimage not found"
+fi
+
 
 echo
 echo "============================"
-echo "HP PROBE"
+echo "SANE BACKENDS"
 echo "============================"
 
-hp-probe -b usb || true
+if [ -f /etc/sane.d/dll.conf ]; then
+
+    echo "Enabled SANE backends:"
+    grep -v '^[[:space:]]*#' /etc/sane.d/dll.conf | grep -v '^[[:space:]]*$'
+
+fi
+
 
 echo
 echo "============================"
-echo "SCANIMAGE DEBUG"
+echo "SANE FIND SCANNER"
 echo "============================"
 
-export SANE_DEBUG_HPAIO=255
-export SANE_DEBUG_DLL=255
+if command -v sane-find-scanner >/dev/null 2>&1; then
 
-scanimage \
--d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
--T || true
+    sane-find-scanner -v || true
+
+else
+
+    echo "WARNING: sane-find-scanner not found"
+
+fi
+
 
 echo
 echo "============================"
-echo "HPAIO library"
+echo "SCANIMAGE -L"
 echo "============================"
 
-find /usr -name "libsane-hpaio*" 2>/dev/null || true
-find /usr -name "*hpaio*" 2>/dev/null || true
+if command -v scanimage >/dev/null 2>&1; then
 
-echo "=== /etc/sane.d/dll.d/hplip ==="
-cat /etc/sane.d/dll.d/hplip 2>&1 || true
+    export SANE_DEBUG_DLL="${SANE_DEBUG_DLL:-0}"
+    export SANE_DEBUG_HPAIO="${SANE_DEBUG_HPAIO:-0}"
 
-echo "=== /etc/sane.d/dll.conf ==="
-cat /etc/sane.d/dll.conf 2>&1 || true
+    scanimage -L || true
+
+else
+
+    echo "ERROR: scanimage not found"
+
+fi
+
 
 echo
 echo "============================"
-echo "DLL config"
+echo "HP SANE DEVICE DIRECT TEST"
 echo "============================"
 
-cat /etc/sane.d/dll.conf || true
+if command -v scanimage >/dev/null 2>&1; then
+
+    HP_SCANNER="hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M"
+
+    echo "Testing:"
+    echo "$HP_SCANNER"
+
+    scanimage -L 2>&1 || true
+
+fi
+
 
 echo
 echo "============================"
-echo "Installed packages"
+echo "SANED CONFIGURATION"
 echo "============================"
 
-dpkg -l | grep -E "hplip|libsane|sane" || true
+if [ -f /etc/sane.d/saned.conf ]; then
+    cat /etc/sane.d/saned.conf
+else
+    echo "/etc/sane.d/saned.conf not found"
+fi
+
 
 echo
 echo "============================"
-echo "TEST OPEN DEVICE"
+echo "STARTING SANED"
 echo "============================"
 
-scanimage \
--d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
--T || true
+if command -v saned >/dev/null 2>&1; then
+
+    echo "saned found:"
+    command -v saned
+
+else
+
+    echo "WARNING: saned not found"
+
+fi
+
 
 echo
 echo "============================"
-echo "HPLIP diagnostics"
+echo "STARTING SCAN SERVICES"
 echo "============================"
 
-echo "--- hp-info ---"
-which hp-info || true
-hp-info --version || true
+#
+# Do not start hp-info or hp-toolbox here.
+# They can disturb the USB interface of some HPLIP devices.
+#
 
-echo
-echo "--- libsane-hpaio ---"
-find /usr -name "libsane-hpaio*" 2>/dev/null || true
+if command -v saned >/dev/null 2>&1; then
 
-echo
-echo "--- hpaio files ---"
-find /usr -name "*hpaio*" 2>/dev/null || true
+    if [ -f /etc/services ]; then
 
-echo
-echo "--- SANE backends ---"
-find /usr/lib -name "libsane-*.so*" 2>/dev/null || true
+        grep -q '^sane-streamtcp' /etc/services 2>/dev/null || \
+            echo "sane-streamtcp 6566/tcp" >> /etc/services
 
-echo
-echo "--- Installed packages ---"
-dpkg -l | grep -E "hplip|sane|printer-driver" || true
+    fi
 
-echo
-echo "============================"
-echo "Find scanner"
-echo "============================"
-sane-find-scanner || true
+    echo "Starting saned..."
 
-############################################################
-# saned
-############################################################
+    saned -d -l 2>&1 &
 
-echo
-echo "============================"
-echo "Starting saned"
-echo "============================"
+    SANED_PID=$!
 
-mkdir -p /var/run/saned
+    echo "saned PID: $SANED_PID"
 
-/usr/sbin/saned -a -d128 &
+else
+
+    echo "saned cannot be started"
+
+fi
+
 
 echo
 echo "============================"
-echo "HPAIO DEBUG"
+echo "FINAL USB STATUS"
 echo "============================"
 
-export SANE_DEBUG_HPAIO=255
-export SANE_DEBUG_DLL=255
+if command -v lsusb >/dev/null 2>&1; then
+    lsusb
+fi
 
-scanimage -L || true
+if [ -n "$HP_BUS" ] && [ -n "$HP_DEVICE" ]; then
+
+    HP_DEV="/dev/bus/usb/$HP_BUS/$HP_DEVICE"
+
+    echo
+    echo "HP device:"
+    ls -l "$HP_DEV" 2>/dev/null || true
+
+fi
+
 
 echo
-echo "Try open scanner..."
+echo "########################################"
+echo "### Scan Server running"
+echo "########################################"
 
-hp-info -i || true
 
-echo "============================"
-echo "USB permissions"
-echo "============================"
+#
+# Keep the add-on alive.
+#
 
-ls -l /dev/bus/usb/*/*
+while true; do
 
-echo "============================"
-echo "Scan test"
-echo "============================"
+    sleep 3600
 
-scanimage -T -d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" || true
-
-scanimage \
--d "hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M" \
---format=pnm >/dev/null || true
-
-echo
-echo "============================"
-echo "USB devices in container"
-echo "============================"
-
-ls -l /dev/bus/usb/*/* || true
-
-echo
-echo "============================"
-echo "USB printer devices"
-echo "============================"
-
-ls -l /dev/usb/* || true
-
-echo
-echo "============================"
-echo "Loaded kernel modules"
-echo "============================"
-
-cat /proc/modules | grep usb || true
-
-echo "============================"
-echo "HP INFO"
-echo "============================"
-
-hp-info -i || true
-
-echo
-echo "============================"
-echo "HP PROBE"
-echo "============================"
-
-hp-probe -b usb || true
-
-sleep 2
-
-############################################################
-# scanbd
-############################################################
-
-echo
-echo "============================"
-echo "Starting scanbd"
-echo "============================"
-
-exec scanbd -f -c /etc/scanbd/scanbd.conf
+done
