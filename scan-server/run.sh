@@ -1,273 +1,209 @@
 #!/usr/bin/with-contenv bashio
-set -u
 
-echo "########################################"
-echo "### Scan Server starting"
-echo "########################################"
+ulimit -n 1048576
+
+chmod a+x /usr/bin/get_scan_filename
+
+echo "copying defaults and scan_pre from /opt/sane-scan-pdf to /config/sane-scan-pdf if non-existing"
+mkdir -p "/config/sane-scan-pdf"
+if [ ! -f "/config/sane-scan-pdf/defaults" ]; then
+    mv /opt/sane-scan-pdf/defaults /config/sane-scan-pdf/defaults
+else
+    rm /opt/sane-scan-pdf/defaults
+fi
+ln -s /config/sane-scan-pdf/defaults /opt/sane-scan-pdf/defaults
+
+if [ ! -f "/config/sane-scan-pdf/scan_pre" ]; then
+    mv /opt/sane-scan-pdf/scan_pre /config/sane-scan-pdf/scan_pre
+else
+    rm /opt/sane-scan-pdf/scan_pre
+fi
+ln -s /config/sane-scan-pdf/scan_pre /opt/sane-scan-pdf/scan_pre
+
+chmod a+x /config/sane-scan-pdf/defaults /config/sane-scan-pdf/scan_pre
+
+# copy custom component if it doesn't already exist
+if [ ! -d "/homeassistant/custom_components/scan_server_integration" ]; then
+    echo "Custom integration not found, copying..."
+    mkdir -p /homeassistant/custom_components/scan_server_integration
+    cp -r /custom_components/scan_server_integration/* /homeassistant/custom_components/scan_server_integration/
+fi
+
+CONFIG_PATH_DLL="/config/dll.conf"
+SCANBD_CONF_DLL="/etc/scanbd/dll.conf"
+
+echo "Checking for $CONFIG_PATH_DLL"
+if [ ! -f "$CONFIG_PATH_DLL" ]; then
+    mv "$SCANBD_CONF_DLL" "$CONFIG_PATH_DLL"
+    echo "created default config"
+else
+    echo "use existing config"
+fi
+rm -f "$SCANBD_CONF_DLL"
+ln -s "$CONFIG_PATH_DLL" "$SCANBD_CONF_DLL"
+
+CONFIG_PATH_SANED="/config/saned.conf"
+SANED_CONF="/etc/sane.d/saned.conf"
+
+echo "Checking for $CONFIG_PATH_SANED"
+if [ ! -f "$CONFIG_PATH_SANED" ]; then
+    echo -e "\n# Allow all private network ranges\nlocalhost\n192.168.0.0/16\n10.0.0.0/8\n172.16.0.0/12" | tee -a "$SANED_CONF"
+    mv "$SANED_CONF" "$CONFIG_PATH_SANED"
+    echo "created default config"
+else
+    echo "use existing config"
+fi
+rm -f "$SANED_CONF"
+ln -s "$CONFIG_PATH_SANED" "$SANED_CONF"
+
+CONFIG_PATH_SCANBD="/config/scanbd.conf"
+SCANBD_CONF="/etc/scanbd/scanbd.conf"
+
+echo "Checking for $CONFIG_PATH_SCANBD"
+if [ ! -f "$CONFIG_PATH_SCANBD" ]; then
+    mv "$SCANBD_CONF" "$CONFIG_PATH_SCANBD"
+    sed -i 's/"test\.script"/"scan.script"/g' "$CONFIG_PATH_SCANBD"
+    echo "created default config"
+else
+    echo "use existing config"
+fi
+rm -f "$SCANBD_CONF"
+ln -s "$CONFIG_PATH_SCANBD" "$SCANBD_CONF"
+
+SCRIPT_PATH="/config/scripts"
+if [ ! -d "$SCRIPT_PATH" ]; then
+    echo "creating default scanbd scripts in $SCRIPT_PATH"
+    mv /usr/share/scanbd/scripts /config/
+else
+    echo "Using existing scanbd scripts from $SCRIPT_PATH"
+fi
+
+SCAN_SCRIPT="$SCRIPT_PATH/scan.script"
+SCAN_SCRIPT_SOURCE="src/scripts/scan.script"
+if [ ! -f "$SCAN_SCRIPT" ]; then
+    mv "$SCAN_SCRIPT_SOURCE" "$SCRIPT_PATH"
+fi
+chmod a+x "$SCRIPT_PATH/$(basename "$SCAN_SCRIPT")"
+ln -sfn /config/scripts /etc/scanbd/scripts
+
+echo "Starting dbus-daemon..."
+dbus-daemon --system
+
+echo "Starting inetd..."
+service openbsd-inetd start
+
+# ------------------------------------------------------------
+# HP LaserJet M1536dnf diagnostic block
+# ------------------------------------------------------------
+# This is intentionally diagnostic only. It must never prevent scanbd
+# from starting. The M1536dnf exposes its scanner through the HP vendor
+# interface (03f0:012a), and HPLIP/hpaio is expected to handle it.
 
 echo ""
-echo "============================"
-echo "Starting dbus-daemon"
-echo "============================"
-mkdir -p /run/dbus
-dbus-daemon --system --fork || true
-
-echo ""
-echo "============================"
-echo "USB devices"
-echo "============================"
-lsusb || true
-
-echo ""
-echo "============================"
-echo "Finding HP LaserJet M1536dnf"
-echo "============================"
+echo "========================================"
+echo "HP M1536dnf diagnostic"
+echo "========================================"
 
 HP_LINE="$(lsusb -d 03f0:012a 2>/dev/null | head -n 1 || true)"
-
-if [ -z "$HP_LINE" ]; then
-    echo "ERROR: HP device 03f0:012a was not found!"
-    exit 1
-fi
-
-echo "$HP_LINE"
-
-HP_BUS="$(echo "$HP_LINE" | awk '{print $2}')"
-HP_DEV="$(echo "$HP_LINE" | awk '{print $4}' | tr -d ':')"
-
-HP_USB="/dev/bus/usb/${HP_BUS}/${HP_DEV}"
-
-echo ""
-echo "Detected:"
-echo "  Bus:    $HP_BUS"
-echo "  Device: $HP_DEV"
-echo "  Path:   $HP_USB"
-
-echo ""
-echo "============================"
-echo "USB device permissions"
-echo "============================"
-ls -l "$HP_USB" 2>&1 || true
-stat "$HP_USB" 2>&1 || true
-
-echo ""
-echo "============================"
-echo "Current user"
-echo "============================"
-id || true
-
-echo ""
-echo "============================"
-echo "Relevant groups"
-echo "============================"
-getent group lp 2>/dev/null || true
-getent group scanner 2>/dev/null || true
-getent group plugdev 2>/dev/null || true
-
-echo ""
-echo "============================"
-echo "USB descriptor"
-echo "============================"
-timeout 10 lsusb -v -d 03f0:012a 2>&1 || true
-
-echo ""
-echo "============================"
-echo "Finding sysfs device"
-echo "============================"
-
-SYS_DEVICE=""
-
-for d in /sys/bus/usb/devices/*; do
-    [ -f "$d/idVendor" ] || continue
-
-    VID="$(cat "$d/idVendor" 2>/dev/null || true)"
-    PID="$(cat "$d/idProduct" 2>/dev/null || true)"
-
-    if [ "$VID" = "03f0" ] && [ "$PID" = "012a" ]; then
-        SYS_DEVICE="$d"
-        break
-    fi
-done
-
-if [ -z "$SYS_DEVICE" ]; then
-    echo "ERROR: HP device was not found in /sys/bus/usb/devices"
+if [ -n "$HP_LINE" ]; then
+    echo "HP USB device: $HP_LINE"
+    HP_BUS="$(echo "$HP_LINE" | awk '{print $2}')"
+    HP_DEV="$(echo "$HP_LINE" | awk '{print $4}' | tr -d ':')"
+    HP_USB="/dev/bus/usb/${HP_BUS}/${HP_DEV}"
+    echo "USB node: $HP_USB"
+    ls -l "$HP_USB" 2>&1 || true
 else
-    echo "SYS_DEVICE=$SYS_DEVICE"
-
-    echo ""
-    echo "--- Device information ---"
-
-    for f in \
-        idVendor \
-        idProduct \
-        manufacturer \
-        product \
-        serial \
-        busnum \
-        devnum \
-        speed \
-        bNumConfigurations \
-        bConfigurationValue \
-        authorized
-    do
-        if [ -f "$SYS_DEVICE/$f" ]; then
-            echo -n "$f: "
-            cat "$SYS_DEVICE/$f" 2>/dev/null || true
-        fi
-    done
-
-    echo ""
-    echo "============================"
-    echo "USB interfaces"
-    echo "============================"
-
-    for i in "${SYS_DEVICE}":*; do
-        [ -d "$i" ] || continue
-
-        echo "----------------------------"
-        echo "Interface path: $i"
-
-        echo -n "Interface number: "
-        cat "$i/bInterfaceNumber" 2>/dev/null || true
-
-        echo -n "Class: "
-        cat "$i/bInterfaceClass" 2>/dev/null || true
-
-        echo -n "Subclass: "
-        cat "$i/bInterfaceSubClass" 2>/dev/null || true
-
-        echo -n "Protocol: "
-        cat "$i/bInterfaceProtocol" 2>/dev/null || true
-
-        echo -n "Endpoints: "
-        cat "$i/bNumEndpoints" 2>/dev/null || true
-
-        echo -n "Driver: "
-        if [ -L "$i/driver" ]; then
-            readlink "$i/driver" 2>/dev/null || true
-        else
-            echo "NONE"
-        fi
-
-        for e in "$i"/ep_*; do
-            [ -e "$e" ] || continue
-
-            echo "  Endpoint: $(basename "$e")"
-
-            echo -n "    Address: "
-            cat "$e/bEndpointAddress" 2>/dev/null || true
-
-            echo -n "    Attributes: "
-            cat "$e/bmAttributes" 2>/dev/null || true
-
-            echo -n "    Max packet: "
-            cat "$e/wMaxPacketSize" 2>/dev/null || true
-
-            echo -n "    Type: "
-            cat "$e/type" 2>/dev/null || true
-        done
-    done
+    echo "WARNING: HP device 03f0:012a not found"
 fi
 
-echo ""
-echo "============================"
-echo "Kernel modules"
-echo "============================"
-grep -E 'usblp|usbcore|xhci|dwc2' /proc/modules 2>/dev/null || true
+echo "--- kernel usblp state ---"
+grep -E '^usblp ' /proc/modules 2>/dev/null || echo "usblp not loaded"
 
-echo ""
-echo "============================"
-echo "HPLIP versions"
-echo "============================"
+echo "--- HPLIP packages ---"
 dpkg -l 2>/dev/null | grep -E 'hplip|libsane-hpaio|sane-utils' || true
 
-echo ""
-echo "============================"
-echo "HPLIP device discovery"
-echo "============================"
-
+echo "--- HPLIP USB discovery ---"
 timeout 15 hp-probe -b usb 2>&1 || true
 
-echo ""
-echo "============================"
-echo "SANE configuration"
-echo "============================"
-
-echo "--- /etc/sane.d/dll.conf ---"
-cat /etc/sane.d/dll.conf 2>&1 || true
-
-echo ""
-echo "--- /etc/sane.d/dll.d ---"
-find /etc/sane.d/dll.d -maxdepth 1 -type f -print -exec cat {} \; 2>&1 || true
-
-echo ""
-echo "============================"
-echo "Scanner detection"
-echo "============================"
-
-timeout 20 sane-find-scanner -v 2>&1 || true
-
-echo ""
-echo "--- scanimage -L ---"
+echo "--- SANE devices ---"
 timeout 20 scanimage -L 2>&1 || true
 
-HP_URI="hpaio:/usb/HP_LaserJet_M1536dnf_MFP?serial=00CND9D5RD6M"
+echo "--- sane-find-scanner HP result ---"
+timeout 20 sane-find-scanner 2>&1 | grep -E '03f0|Hewlett|HP LaserJet|found possible USB scanner' || true
 
-echo ""
-echo "============================"
-echo "HPAIO OPEN TEST"
-echo "============================"
-echo "Device: $HP_URI"
-echo "Timeout: 15 seconds"
-echo ""
+HP_URI="$(timeout 20 scanimage -L 2>/dev/null | sed -n 's/^device `\([^`]*\)'.*/\1/p' | grep -m1 '^hpaio:/usb/HP_LaserJet_M1536dnf_MFP' || true)"
 
-SANE_DEBUG_DLL=255 \
-SANE_DEBUG_HPAIO=255 \
-timeout 15 scanimage -d "$HP_URI" --help 2>&1 || true
-
-echo ""
-echo "============================"
-echo "HPAIO REAL SCAN TEST"
-echo "============================"
-echo "Timeout: 30 seconds"
-echo ""
-
-rm -f /tmp/hp-test.pnm
-
-SANE_DEBUG_DLL=255 \
-SANE_DEBUG_HPAIO=255 \
-timeout 30 scanimage \
-    -d "$HP_URI" \
-    --format=pnm \
-    --resolution 75 \
-    > /tmp/hp-test.pnm 2>&1
-
-SCAN_RC=$?
-
-echo ""
-echo "Scan command exit code: $SCAN_RC"
-
-if [ -f /tmp/hp-test.pnm ]; then
-    echo "Scan output exists:"
-    ls -lh /tmp/hp-test.pnm
+if [ -n "$HP_URI" ]; then
+    echo "Detected HPAIO URI: $HP_URI"
+    echo "--- HPAIO open test (diagnostic only) ---"
+    SANE_DEBUG_DLL=255 SANE_DEBUG_HPAIO=255 \
+        timeout 15 scanimage -d "$HP_URI" --help 2>&1 || true
 else
-    echo "No scan output file created"
+    echo "WARNING: HPAIO URI was not detected by scanimage -L"
 fi
 
+echo "========================================"
+echo "End HP diagnostic"
+echo "========================================"
 echo ""
-echo "============================"
-echo "Final USB state"
-echo "============================"
 
-lsusb -d 03f0:012a 2>&1 || true
-ls -l "$HP_USB" 2>&1 || true
+OPTIONS_FILE="/data/options.json"
 
-echo ""
-echo "============================"
-echo "DONE"
-echo "============================"
+reload_options() {
+    NETSHARE_SERVER=$(jq -r '.netshare_server' "$OPTIONS_FILE")
+    NETSHARE_USERNAME=$(jq -r '.netshare_username' "$OPTIONS_FILE")
+    NETSHARE_PASSWORD=$(jq -r '.netshare_password' "$OPTIONS_FILE")
+    NETSHARE_PATH=$(jq -r '.netshare_path' "$OPTIONS_FILE")
+    NETSHARE_PATH="${NETSHARE_PATH##[\\/]}"
 
-echo ""
-echo "Diagnostics finished."
+    curl -sSL -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+        http://supervisor/mounts/scanserver -X DELETE > /dev/null
 
-exit 0
+    if [[ -n "$NETSHARE_SERVER" ]]; then
+        JSON_DATA=$(jq -n \
+            --arg name "scanserver" \
+            --arg usage "share" \
+            --arg type "cifs" \
+            --arg server "$NETSHARE_SERVER" \
+            --arg share "$NETSHARE_PATH" \
+            --arg username "$NETSHARE_USERNAME" \
+            --arg password "$NETSHARE_PASSWORD" \
+            --argjson read_only false \
+            '{
+                name: $name,
+                usage: $usage,
+                type: $type,
+                server: $server,
+                share: $share,
+                username: $username,
+                password: $password,
+                read_only: $read_only
+            }')
+
+        RESPONSE=$(curl -sSL -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+            -H "Content-Type: application/json" \
+            -X POST -d "$JSON_DATA" http://supervisor/mounts)
+        RESPONSE_RESULT=$(jq -r ".result" <<< "$RESPONSE")
+
+        if [[ $RESPONSE_RESULT != 'ok' ]]; then
+            curl -X POST \
+                -H "Authorization: Bearer $SUPERVISOR_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d '{
+                    "message": "The network share could not be mounted, please check the host, user, password and path in the add-on options.",
+                    "title": "Scan Server Error: Could not mount network share",
+                    "notification_id": "scan_server_error"
+                }' \
+                http://supervisor/core/api/services/persistent_notification/create
+        else
+            echo "Network share $NETSHARE_SERVER/$NETSHARE_PATH mounted to /share/scanserver"
+        fi
+    fi
+}
+
+reload_options
+trap reload_options SIGHUP
+
+echo "Starting scanbd..."
+export SANE_CONFIG_DIR=/etc/scanbd/
+scanbd -d2 -f -c /etc/scanbd/scanbd.conf
