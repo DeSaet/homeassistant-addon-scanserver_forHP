@@ -294,6 +294,25 @@ find \
     \) \
     2>/dev/null | head -200 || true
 
+echo "============================"
+echo "HPLIP PLUGIN"
+echo "============================"
+
+echo "--- plugin directories ---"
+find /usr/share/hplip -maxdepth 4 -type f \
+  \( -name '*soapht*' -o -name 'bb_*' -o -name '*plugin*' \) \
+  -print 2>&1 || true
+
+echo "--- hplip state ---"
+cat /var/lib/hp/hplip.state 2>&1 || true
+
+echo "--- soapht ---"
+ls -la /usr/share/hplip/scan/plugins/ 2>&1 || true
+
+echo "--- plugin library dependencies ---"
+if [ -f /usr/share/hplip/scan/plugins/bb_soapht.so ]; then
+    ldd /usr/share/hplip/scan/plugins/bb_soapht.so 2>&1 || true
+fi
 
 # ------------------------------------------------------------
 # HPAIO library
